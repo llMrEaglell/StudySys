@@ -27,12 +27,12 @@ SECRET_KEY = '5*9f5q57mqmlz2#f$x1h76&jxy#yortjl1v+l*6hd18$d*yx#0'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['.localhost', '127.0.0.1', '[::1]']
 
 SITE_ID = 1
 SITE_NAME = 'DMOJ'
 SITE_LONG_NAME = 'DMOJ: Modern Online Judge'
-SITE_ADMIN_EMAIL = ''
+SITE_ADMIN_EMAIL = 'gubenko.oleksandr@vu.cdu.edu.ua'
 
 DMOJ_REQUIRE_STAFF_2FA = True
 # Display warnings that admins will not perform 2FA recovery.
@@ -48,7 +48,12 @@ DMOJ_PP_STEP = 0.95
 DMOJ_PP_ENTRIES = 100
 DMOJ_PP_BONUS_FUNCTION = lambda n: 300 * (1 - 0.997 ** n)  # noqa: E731
 
+# Celery
+CELERY_BROKER_URL = 'redis://localhost:6379'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379'
+
 ACE_URL = '//cdnjs.cloudflare.com/ajax/libs/ace/1.1.3'
+JQUERY_JS = '//cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.min.js'
 SELECT2_JS_URL = '//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/js/select2.min.js'
 SELECT2_CSS_URL = '//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/css/select2.min.css'
 
@@ -57,7 +62,7 @@ DMOJ_CAMO_KEY = None
 DMOJ_CAMO_HTTPS = False
 DMOJ_CAMO_EXCLUDE = ()
 
-DMOJ_PROBLEM_DATA_ROOT = None
+DMOJ_PROBLEM_DATA_ROOT = '/problems/'
 
 DMOJ_PROBLEM_MIN_TIME_LIMIT = 0  # seconds
 DMOJ_PROBLEM_MAX_TIME_LIMIT = 60  # seconds
@@ -382,24 +387,8 @@ LOCALE_PATHS = [
 ]
 
 LANGUAGES = [
-    ('ca', _('Catalan')),
-    ('de', _('German')),
-    ('el', _('Greek')),
     ('en', _('English')),
-    ('es', _('Spanish')),
-    ('fr', _('French')),
-    ('hr', _('Croatian')),
-    ('hu', _('Hungarian')),
-    ('ja', _('Japanese')),
-    ('ko', _('Korean')),
-    ('pt', _('Brazilian Portuguese')),
-    ('ro', _('Romanian')),
     ('ru', _('Russian')),
-    ('sr-latn', _('Serbian (Latin)')),
-    ('tr', _('Turkish')),
-    ('vi', _('Vietnamese')),
-    ('zh-hans', _('Simplified Chinese')),
-    ('zh-hant', _('Traditional Chinese')),
 ]
 
 BLEACH_USER_SAFE_TAGS = [
@@ -504,8 +493,15 @@ MARTOR_UPLOAD_SAFE_EXTS = {'.jpg', '.png', '.gif'}
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'dmoj',
+        'USER': 'dmoj',
+        'PASSWORD': 'root123!',
+        'HOST': '127.0.0.1',
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'sql_mode': 'STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION',
+        },
     },
 }
 
@@ -532,7 +528,7 @@ EVENT_DAEMON_SUBMISSION_KEY = '6Sdmkx^%pk@GsifDfXcwX*Y7LRF%RGT8vmFpSxFBT$fwS7trc
 # Whatever you do, this better be one of the entries in `LANGUAGES`.
 LANGUAGE_CODE = 'en'
 TIME_ZONE = 'UTC'
-DEFAULT_USER_TIME_ZONE = 'America/Toronto'
+DEFAULT_USER_TIME_ZONE = 'Europe/Kiev'
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
@@ -551,10 +547,19 @@ STATICFILES_FINDERS = (
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'resources'),
 ]
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATIC_URL = '/static/'
 
 # Define a cache
-CACHES = {}
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://localhost:6379/0',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
+}
 
 # Authentication
 AUTHENTICATION_BACKENDS = (
