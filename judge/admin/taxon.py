@@ -3,6 +3,7 @@ from django.forms import ModelForm, ModelMultipleChoiceField
 from django.utils.translation import gettext_lazy as _
 
 from judge.models import Problem
+from judge.models.interface import TheoryPost
 from judge.widgets import AdminHeavySelect2MultipleWidget
 
 
@@ -27,6 +28,29 @@ class ProblemGroupAdmin(admin.ModelAdmin):
     def get_form(self, request, obj=None, **kwargs):
         self.form.base_fields['problems'].initial = [o.pk for o in obj.problem_set.all()] if obj else []
         return super(ProblemGroupAdmin, self).get_form(request, obj, **kwargs)
+
+
+class TheoryPostGroupForm(ModelForm):
+    theorys = ModelMultipleChoiceField(
+        label=_('Included theory'),
+        queryset=TheoryPost.objects.all(),
+        required=False,
+        help_text=_('These theory are included in this group of theorys.'),
+        widget=AdminHeavySelect2MultipleWidget(data_view='theory_select2')) # TODO MB change this
+
+
+class TheoryPostGroupAdmin(admin.ModelAdmin):
+    fields = ('name', 'full_name', 'theorys')
+    form = TheoryPostGroupForm
+
+    def save_model(self, request, obj, form, change):
+        super(TheoryPostGroupAdmin, self).save_model(request, obj, form, change)
+        obj.theorys.set(form.cleaned_data['theorys'])
+        obj.save()
+
+    def get_form(self, request, obj=None, **kwargs):
+        self.form.base_fields['theorys'].initial = [o.pk for o in obj.theorys.all()] if obj else []
+        return super(TheoryPostGroupAdmin, self).get_form(request, obj, **kwargs)
 
 
 class ProblemTypeForm(ModelForm):

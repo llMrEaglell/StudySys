@@ -20,7 +20,7 @@ from judge.views.problem_data import ProblemDataView, ProblemSubmissionDiff, \
 from judge.views.register import ActivationView, RegistrationView
 from judge.views.select2 import AssigneeSelect2View, ClassSelect2View, CommentSelect2View, ContestSelect2View, \
     ContestUserSearchSelect2View, OrganizationSelect2View, ProblemSelect2View, TicketUserSelect2View, \
-    UserSearchSelect2View, UserSelect2View
+    UserSearchSelect2View, UserSelect2View, TheorySelect2View
 from judge.views.widgets import martor_image_uploader
 
 admin.autodiscover()
@@ -273,6 +273,9 @@ urlpatterns = [
     path('blog/', paged_list_view(blog.PostList, 'blog_post_list')),
     path('post/<int:id>-<slug:slug>', blog.PostView.as_view(), name='blog_post'),
 
+    path('theory/', paged_list_view(blog.TheoryList, 'theory_post_list')),
+    path('theory/<int:id>-<slug:slug>', blog.TheoryView.as_view(), name='theory_post'),
+
     path('license/<str:key>', license.LicenseDetail.as_view(), name='license'),
 
     path('mailgun/mail_activate/', mailgun.MailgunActivationView.as_view(), name='mailgun_activate'),
@@ -352,6 +355,7 @@ urlpatterns = [
         path('organization/', OrganizationSelect2View.as_view(), name='organization_select2'),
         path('class/', ClassSelect2View.as_view(), name='class_select2'),
         path('problem/', ProblemSelect2View.as_view(), name='problem_select2'),
+        path('theory/', TheorySelect2View.as_view(), name='theory_select2'),
         path('contest/', ContestSelect2View.as_view(), name='contest_select2'),
         path('comment/', CommentSelect2View.as_view(), name='comment_select2'),
     ])),

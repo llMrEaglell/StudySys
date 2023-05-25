@@ -10,6 +10,7 @@ from reversion.admin import VersionAdmin
 
 from judge.dblock import LockModel
 from judge.models import BlogPost, NavigationBar
+from judge.models.interface import TheoryPost
 from judge.widgets import AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget, AdminMartorWidget
 
 
@@ -66,6 +67,21 @@ class BlogPostForm(ModelForm):
         }
 
 
+class TheoryPostForm(ModelForm):
+    def __init__(self, *args, **kwargs):
+        super(TheoryPostForm, self).__init__(*args, **kwargs)
+        if 'authors' in self.fields:
+            # self.fields['authors'] does not exist when the user has only view permission on the model.
+            self.fields['authors'].widget.can_add_related = False
+
+    class Meta:
+        widgets = {
+            'authors': AdminHeavySelect2MultipleWidget(data_view='profile_select2', attrs={'style': 'width: 100%'}),
+            'content': AdminMartorWidget(attrs={'data-markdownfy-url': reverse_lazy('blog_preview')}),
+            'summary': AdminMartorWidget(attrs={'data-markdownfy-url': reverse_lazy('blog_preview')}),
+        }
+
+
 class BlogPostAdmin(VersionAdmin):
     fieldsets = (
         (None, {'fields': ('title', 'slug', 'authors', 'visible', 'sticky', 'publish_on')}),
@@ -91,6 +107,36 @@ class BlogPostAdmin(VersionAdmin):
 
     def get_queryset(self, request):
         queryset = BlogPost.objects.all()
+        if not request.user.has_perm('judge.edit_all_post'):
+            queryset = queryset.filter(authors=request.profile)
+        return queryset
+
+
+class TheoryPostAdmin(VersionAdmin):
+    fieldsets = (
+        (None, {'fields': ('title', 'slug', 'authors', 'visible', 'sticky', 'publish_on')}),
+        (_('Content'), {'fields': ('content', 'og_image')}),
+        (_('Summary'), {'classes': ('collapse',), 'fields': ('summary',)}),
+    )
+    prepopulated_fields = {'slug': ('title',)}
+    list_display = ('id', 'title', 'visible', 'sticky', 'publish_on')
+    list_display_links = ('id', 'title')
+    ordering = ('-publish_on',)
+    form = TheoryPostForm
+    date_hierarchy = 'publish_on'
+
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            return request.user.has_perm('judge.change_blogpost')
+        return obj.is_editable_by(request.user)
+
+    def get_readonly_fields(self, request, obj=None):
+        if not request.user.has_perm('judge.change_post_visibility'):
+            return ['visible']
+        return []
+
+    def get_queryset(self, request):
+        queryset = TheoryPost.objects.all()
         if not request.user.has_perm('judge.edit_all_post'):
             queryset = queryset.filter(authors=request.profile)
         return queryset

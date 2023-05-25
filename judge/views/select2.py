@@ -6,6 +6,7 @@ from django.views.generic.list import BaseListView
 
 from judge.jinja2.gravatar import gravatar
 from judge.models import Class, Comment, Contest, Organization, Problem, Profile
+from judge.models.interface import TheoryPost
 
 
 def _get_user_queryset(term):
@@ -61,6 +62,12 @@ class ProblemSelect2View(Select2View):
     def get_queryset(self):
         return Problem.get_visible_problems(self.request.user) \
                       .filter(Q(code__icontains=self.term) | Q(name__icontains=self.term))
+
+
+class TheorySelect2View(Select2View):
+    def get_queryset(self):
+        return TheoryPost.get_public_posts(self.request.user) \
+            .filter(Q(title__icontains=self.term) | Q(content__icontains=self.term))
 
 
 class ContestSelect2View(Select2View):

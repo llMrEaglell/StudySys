@@ -232,6 +232,14 @@ else:
                     ],
                 },
                 ('judge.BlogPost', 'fa-rss-square'),
+                # ('judge.TheoryPost', 'fa-question-circle'),
+                {
+                    'model': 'judge.TheoryPost',
+                    'icon': 'fa-question-circle',
+                    'children': [
+                        'judge.TheoryPostGroup'
+                    ],
+                },
                 {
                     'model': 'judge.Comment',
                     'icon': 'fa-comment-o',
