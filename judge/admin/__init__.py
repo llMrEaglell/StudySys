@@ -18,7 +18,7 @@ from judge.models import BlogPost, Class, Comment, CommentLock, Contest, Contest
     OrganizationRequest, Problem, ProblemGroup, ProblemPointsVote, ProblemType, Profile, Submission, Ticket
 from judge.models.interface import TheoryPost, TheoryPostGroup
 
-# admin.site.register(BlogPost, BlogPostAdmin)
+admin.site.register(BlogPost, BlogPostAdmin)
 admin.site.register(TheoryPost, TheoryPostAdmin)
 admin.site.register(TheoryPostGroup, TheoryPostGroupAdmin)
 admin.site.register(Comment, CommentAdmin)
