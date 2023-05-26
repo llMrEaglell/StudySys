@@ -12,7 +12,7 @@ from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
 
 from judge.models.contest import Contest
-from judge.models.interface import BlogPost
+from judge.models.interface import BlogPost, TheoryPost
 from judge.models.problem import Problem, Solution
 from judge.models.profile import Profile
 from judge.utils.cachedict import CacheDict
@@ -51,11 +51,13 @@ class Comment(MPTTModel):
         solution_cache = CacheDict(lambda code: Solution.objects.defer('content').get(problem__code=code))
         contest_cache = CacheDict(lambda key: Contest.objects.defer('description').get(key=key))
         blog_cache = CacheDict(lambda id: BlogPost.objects.defer('summary', 'content').get(id=id))
+        theory_cache = CacheDict(lambda id: TheoryPost.objects.defer('summary', 'content').get(id=id))
 
         problem_access = CacheDict(lambda code: problem_cache[code].is_accessible_by(user))
         solution_access = CacheDict(lambda code: problem_access[code] and solution_cache[code].is_accessible_by(user))
         contest_access = CacheDict(lambda key: contest_cache[key].is_accessible_by(user))
         blog_access = CacheDict(lambda id: blog_cache[id].can_see(user))
+        theory_access = CacheDict(lambda id: theory_cache[id].can_see(user))
 
         if batch is None:
             batch = 2 * n
@@ -79,6 +81,9 @@ class Comment(MPTTModel):
                     elif comment.page.startswith('b:'):
                         has_access = blog_access[page_key]
                         comment.page_title = blog_cache[page_key].title
+                    elif comment.page.startswith('t:'):
+                        has_access = theory_access[page_key]
+                        comment.page_title = theory_cache[page_key].title
                     else:
                         has_access = True
                 except ObjectDoesNotExist:
@@ -123,6 +128,8 @@ class Comment(MPTTModel):
                 return Contest.objects.values_list('name', flat=True).get(key=page[2:])
             elif page.startswith('b:'):
                 return BlogPost.objects.values_list('title', flat=True).get(id=page[2:])
+            elif page.startswith('t:'):
+                return TheoryPost.objects.values_list('title', flat=True).get(id=page[2:])
             elif page.startswith('s:'):
                 return _('Editorial for %s') % Problem.objects.values_list('name', flat=True).get(code=page[2:])
             return '<unknown>'
@@ -143,6 +150,8 @@ class Comment(MPTTModel):
                 return Contest.objects.get(key=self.page[2:]).is_accessible_by(user)
             elif self.page.startswith('b:'):
                 return BlogPost.objects.get(id=self.page[2:]).can_see(user)
+            elif self.page.startswith('t:'):
+                return TheoryPost.objects.get(id=self.page[2:]).can_see(user)
             else:
                 return True
         except ObjectDoesNotExist:

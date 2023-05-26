@@ -585,7 +585,7 @@ class ContestStats(TitleMixin, ContestMixin, DetailView):
 
         status_count_queryset = list(
             queryset.values('problem__code', 'result').annotate(count=Count('result'))
-                    .values_list('problem__code', 'result', 'count'),
+            .values_list('problem__code', 'result', 'count'),
         )
         labels, codes = [], []
         contest_problems = self.object.contest_problems.order_by('order').values_list('problem__name', 'problem__code')
@@ -616,15 +616,15 @@ class ContestStats(TitleMixin, ContestMixin, DetailView):
             },
             'problem_ac_rate': get_bar_chart(
                 queryset.values('contest__problem__order', 'problem__name').annotate(ac_rate=ac_rate)
-                        .order_by('contest__problem__order').values_list('problem__name', 'ac_rate'),
+                .order_by('contest__problem__order').values_list('problem__name', 'ac_rate'),
             ),
             'language_count': get_pie_chart(
                 queryset.values('language__name').annotate(count=Count('language__name'))
-                        .filter(count__gt=0).order_by('-count').values_list('language__name', 'count'),
+                .filter(count__gt=0).order_by('-count').values_list('language__name', 'count'),
             ),
             'language_ac_rate': get_bar_chart(
                 queryset.values('language__name').annotate(ac_rate=ac_rate)
-                        .filter(ac_rate__gt=0).values_list('language__name', 'ac_rate'),
+                .filter(ac_rate__gt=0).values_list('language__name', 'ac_rate'),
             ),
         }
 
@@ -840,7 +840,7 @@ class ContestMossView(ContestMossMixin, TitleMixin, DetailView):
         context = super().get_context_data(**kwargs)
 
         problems = list(map(attrgetter('problem'), self.object.contest_problems.order_by('order')
-                                                              .select_related('problem')))
+                            .select_related('problem')))
         languages = list(map(itemgetter(0), ContestMoss.LANG_MAPPING))
 
         results = ContestMoss.objects.filter(contest=self.object)

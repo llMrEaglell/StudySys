@@ -10,7 +10,7 @@ from django.dispatch import receiver
 
 from .caching import finished_submission
 from .models import BlogPost, Comment, Contest, ContestSubmission, EFFECTIVE_MATH_ENGINES, Judge, Language, License, \
-    MiscConfig, Organization, Problem, Profile, Submission, WebAuthnCredential
+    MiscConfig, Organization, Problem, Profile, Submission, WebAuthnCredential, TheoryPost
 
 
 def get_pdf_path(basename: str) -> Optional[str]:
@@ -108,6 +108,17 @@ def post_update(sender, instance, **kwargs):
         'blog_feed:%d' % instance.id,
     ])
     cache.delete_many([make_template_fragment_key('post_content', (instance.id, engine))
+                       for engine in EFFECTIVE_MATH_ENGINES])
+
+
+@receiver(post_save, sender=TheoryPost)
+def post_update(sender, instance, **kwargs):
+    cache.delete_many([
+        make_template_fragment_key('theory_summary', (instance.id,)),
+        'blog_slug:%d' % instance.id,
+        'blog_feed:%d' % instance.id,
+    ])
+    cache.delete_many([make_template_fragment_key('theory_content', (instance.id, engine))
                        for engine in EFFECTIVE_MATH_ENGINES])
 
 
