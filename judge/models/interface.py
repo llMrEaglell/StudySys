@@ -2,6 +2,7 @@ import re
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import CASCADE
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -100,6 +101,19 @@ class BlogPost(models.Model):
         verbose_name_plural = _('blog posts')
 
 
+class TheoryPostGroup(models.Model):
+    name = models.CharField(max_length=20, verbose_name=_('theory group ID'), unique=True)
+    full_name = models.CharField(max_length=100, verbose_name=_('theory group name'))
+
+    def __str__(self):
+        return self.full_name
+
+    class Meta:
+        ordering = ['full_name']
+        verbose_name = _('theory group')
+        verbose_name_plural = _('theory groups')
+
+
 class TheoryPost(models.Model):
     title = models.CharField(verbose_name=_('theory title'), max_length=100)
     authors = models.ManyToManyField(Profile, verbose_name=_('authors'), blank=True)
@@ -140,16 +154,3 @@ class TheoryPost(models.Model):
         )
         verbose_name = _('theory post')
         verbose_name_plural = _('theory posts')
-
-
-class TheoryPostGroup(models.Model):
-    name = models.CharField(max_length=20, verbose_name=_('theory group ID'), unique=True)
-    full_name = models.CharField(max_length=100, verbose_name=_('theory group name'))
-
-    def __str__(self):
-        return self.full_name
-
-    class Meta:
-        ordering = ['full_name']
-        verbose_name = _('theory group')
-        verbose_name_plural = _('theory groups')
