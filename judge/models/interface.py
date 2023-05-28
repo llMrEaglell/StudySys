@@ -154,3 +154,27 @@ class TheoryPost(models.Model):
         )
         verbose_name = _('theory post')
         verbose_name_plural = _('theory posts')
+
+
+class TestPost(models.Model):
+    title = models.CharField(verbose_name=_('test title'), max_length=100)
+    # <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc22xFNhH_BweIoXR30kacF09azZkPPBftMj3jDG_0gx7NrXg/viewform?embedded=true" width="640" height="382" frameborder="0" marginheight="0" marginwidth="0">Завантаження…</iframe>
+    # https://docs.google.com/forms/d/e/1FAIpQLSc22xFNhH_BweIoXR30kacF09azZkPPBftMj3jDG_0gx7NrXg/viewform?usp=sf_link
+    form = models.URLField(verbose_name=_('form'))
+    # regex for get form id(group 5): (https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])(/forms/d/e/)([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])\/(viewform)
+    authors = models.ManyToManyField(Profile, verbose_name=_('authors'), blank=True)
+
+    def is_editable_by(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.has_perm('judge.edit_all_post'):
+            return True
+        return user.has_perm('judge.change_blogpost') and self.authors.filter(id=user.profile.id).exists()
+
+    class Meta:
+        permissions = (
+            ('edit_all_post', _('Edit all posts')),
+            ('change_post_visibility', _('Edit post visibility')),
+        )
+        verbose_name = _('test post')
+        verbose_name_plural = _('test posts')

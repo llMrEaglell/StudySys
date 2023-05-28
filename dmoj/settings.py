@@ -189,6 +189,7 @@ else:
                         'judge.ProblemPointsVote',
                     ],
                 },
+                ('judge.TestPost', 'fa-question-circle'),
                 ('judge.Submission', 'fa-check-square-o'),
                 {
                     'model': 'judge.Language',
@@ -232,7 +233,6 @@ else:
                     ],
                 },
                 ('judge.BlogPost', 'fa-rss-square'),
-                # ('judge.TheoryPost', 'fa-question-circle'),
                 {
                     'model': 'judge.TheoryPost',
                     'icon': 'fa-question-circle',

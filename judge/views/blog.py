@@ -9,7 +9,7 @@ from django.views.generic import ListView
 from judge.comments import CommentedDetailView
 from judge.models import BlogPost, Comment, Contest, Language, Problem, ProblemClarification, Profile, Submission, \
     Ticket
-from judge.models.interface import TheoryPost
+from judge.models.interface import TheoryPost, TestPost
 from judge.utils.cachedict import CacheDict
 from judge.utils.diggpaginator import DiggPaginator
 from judge.utils.opengraph import generate_opengraph
@@ -187,6 +187,30 @@ class TheoryList(ListView):
             context['open_tickets'] = filter_visible_tickets(tickets, self.request.user)[:10]
         else:
             context['open_tickets'] = []
+        return context
+
+
+class TestList(ListView):
+    model = TestPost
+    paginate_by = 10
+    context_object_name = 'test'
+    template_name = 'theory/list.html'
+    title = None
+
+    def get_paginator(self, queryset, per_page, orphans=0,
+                      allow_empty_first_page=True, **kwargs):
+        return DiggPaginator(queryset, per_page, body=6, padding=2,
+                             orphans=orphans, allow_empty_first_page=allow_empty_first_page, **kwargs)
+
+    def get_queryset(self):
+        return (TestPost.objects.prefetch_related('authors__user'))
+
+    def get_context_data(self, **kwargs):
+        context = super(TestList, self).get_context_data(**kwargs)
+        context['title'] = self.title or _('Page %d of Tests') % context['page_obj'].number
+
+        context['user_count'] = Profile.objects.count
+
         return context
 
 
