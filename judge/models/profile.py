@@ -179,6 +179,8 @@ class Profile(models.Model):
                                    help_text=_('User-defined JavaScript for site customization.'))
     current_contest = models.OneToOneField('ContestParticipation', verbose_name=_('current contest'),
                                            null=True, blank=True, related_name='+', on_delete=models.SET_NULL)
+    current_course = models.OneToOneField('CourseParticipation', verbose_name=_('current course'),
+                                           null=True, blank=True, related_name='+', on_delete=models.SET_NULL)
     math_engine = models.CharField(verbose_name=_('math engine'), choices=MATH_ENGINES_CHOICES, max_length=4,
                                    default=settings.MATHOID_DEFAULT_TYPE,
                                    help_text=_('The rendering engine used to render math.'))
@@ -290,12 +292,25 @@ class Profile(models.Model):
 
     remove_contest.alters_data = True
 
+    def remove_course(self):
+        self.current_course = None
+        self.save()
+
+    remove_course.alters_data = True
+
     def update_contest(self):
         contest = self.current_contest
         if contest is not None and (contest.ended or not contest.contest.is_accessible_by(self.user)):
             self.remove_contest()
 
     update_contest.alters_data = True
+
+    def update_course(self):
+        course = self.current_course
+        if course is not None and (course.ended or not course.course.is_accessible_by(self.user)):
+            self.remove_contest()
+
+    update_course.alters_data = True
 
     def check_totp_code(self, code):
         totp = pyotp.TOTP(self.totp_key)
