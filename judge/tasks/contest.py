@@ -4,16 +4,31 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils.translation import gettext as _
 from moss import MOSS
 
-from judge.models import Contest, ContestMoss, ContestParticipation, Submission
+from judge.models import Contest, ContestMoss, ContestParticipation, Submission, Course
 from judge.utils.celery import Progress
 
-__all__ = ('rescore_contest', 'run_moss')
+__all__ = ('rescore_contest', 'run_moss', 'rescore_course')
 
 
 @shared_task(bind=True)
 def rescore_contest(self, contest_key):
     contest = Contest.objects.get(key=contest_key)
     participations = contest.users
+
+    rescored = 0
+    with Progress(self, participations.count(), stage=_('Recalculating contest scores')) as p:
+        for participation in participations.iterator():
+            participation.recompute_results()
+            rescored += 1
+            if rescored % 10 == 0:
+                p.done = rescored
+    return rescored\
+
+
+@shared_task(bind=True)
+def rescore_course(self, course_key):
+    course = Course.objects.get(key=course_key)
+    participations = course.users
 
     rescored = 0
     with Progress(self, participations.count(), stage=_('Recalculating contest scores')) as p:

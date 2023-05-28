@@ -20,7 +20,7 @@ from judge.views.problem_data import ProblemDataView, ProblemSubmissionDiff, \
 from judge.views.register import ActivationView, RegistrationView
 from judge.views.select2 import AssigneeSelect2View, ClassSelect2View, CommentSelect2View, ContestSelect2View, \
     ContestUserSearchSelect2View, OrganizationSelect2View, ProblemSelect2View, TicketUserSelect2View, \
-    UserSearchSelect2View, UserSelect2View, TheorySelect2View
+    UserSearchSelect2View, UserSelect2View, TheorySelect2View, TestSelect2View
 from judge.views.widgets import martor_image_uploader
 
 admin.autodiscover()
@@ -301,6 +301,7 @@ urlpatterns = [
             path('problem', preview.ProblemMarkdownPreviewView.as_view(), name='problem_preview'),
             path('blog', preview.BlogMarkdownPreviewView.as_view(), name='blog_preview'),
             path('contest', preview.ContestMarkdownPreviewView.as_view(), name='contest_preview'),
+            path('course', preview.CourseMarkdownPreviewView.as_view(), name='course_preview'),
             path('comment', preview.CommentMarkdownPreviewView.as_view(), name='comment_preview'),
             path('flatpage', preview.FlatPageMarkdownPreviewView.as_view(), name='flatpage_preview'),
             path('profile', preview.ProfileMarkdownPreviewView.as_view(), name='profile_preview'),
@@ -356,6 +357,7 @@ urlpatterns = [
         path('class/', ClassSelect2View.as_view(), name='class_select2'),
         path('problem/', ProblemSelect2View.as_view(), name='problem_select2'),
         path('theory/', TheorySelect2View.as_view(), name='theory_select2'),
+        path('test/', TestSelect2View.as_view(), name='test_select2'),
         path('contest/', ContestSelect2View.as_view(), name='contest_select2'),
         path('comment/', CommentSelect2View.as_view(), name='comment_select2'),
     ])),

@@ -21,7 +21,7 @@ from django.views.generic import DetailView, ListView
 
 from judge import event_poster as event
 from judge.highlight_code import highlight_code
-from judge.models import Contest, Language, Problem, ProblemTranslation, Profile, Submission
+from judge.models import Contest, Language, Problem, ProblemTranslation, Profile, Submission, Course
 from judge.models.problem import SubmissionSourceAccess
 from judge.utils.infinite_paginator import InfinitePaginationMixin
 from judge.utils.lazy import memo_lazy
@@ -601,6 +601,34 @@ class ForceContestMixin(object):
             raise ImproperlyConfigured('Must pass a contest')
         self._contest = get_object_or_404(Contest, key=kwargs['contest'])
         return super(ForceContestMixin, self).get(request, *args, **kwargs)
+
+
+class ForceCourseMixin(object):
+    @property
+    def in_course(self):
+        return True
+
+    @property
+    def course(self):
+        return self._course
+
+    def access_check(self, request):
+        super(ForceCourseMixin, self).access_check(request)
+
+        if not request.user.has_perm('judge.see_private_contest'):
+            if not self.course.is_visible:
+                raise Http404()
+            if self.course.start_time is not None and self.course.start_time > timezone.now():
+                raise Http404()
+
+    def get_problem_number(self, problem):
+        return self.course.course_problems.select_related('problem').get(problem=problem).order
+
+    def get(self, request, *args, **kwargs):
+        if 'course' not in kwargs:
+            raise ImproperlyConfigured('Must pass a course')
+        self._course = get_object_or_404(Course, key=kwargs['contest'])
+        return super(ForceCourseMixin, self).get(request, *args, **kwargs)
 
 
 class UserAllContestSubmissions(ForceContestMixin, AllUserSubmissions):

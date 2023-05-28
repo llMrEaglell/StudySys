@@ -31,10 +31,9 @@ from reversion import revisions
 
 from judge import event_poster as event
 from judge.comments import CommentedDetailView
-from judge.forms import ContestCloneForm
-from judge.models import Contest, ContestMoss, CourseParticipation, ContestProblem, ContestTag, \
-    Problem, Profile, Submission
-from judge.models.course import Course, CourseParticipation, CourseProblem, CourseMoss, CourseTheory, CourseTest
+from judge.models import Submission, Problem
+from judge.models.course import Course, CourseParticipation, CourseProblem, CourseTheory, CourseTest, \
+    CourseTag
 from judge.tasks import run_moss
 from judge.utils.celery import redirect_to_task_status
 from judge.utils.opengraph import generate_opengraph
@@ -44,19 +43,18 @@ from judge.utils.views import DiggPaginatorMixin, QueryStringSortMixin, SingleOb
     generic_message
 
 __all__ = ['CourseList', 'CourseDetail', 'CourseJoin', 'CourseLeave', 'CourseCalendar',
-           'CourseClone', 'CourseStats', 'CourseMossView', 'CourseMossDelete',
-             'CourseParticipationDisqualify']
+           'CourseClone', 'CourseStats', 'CourseParticipationDisqualify']
 
 
 def _find_course(request, key, private_check=True):
     try:
-        contest = Course.objects.get(key=key)
-        if private_check and not contest.is_accessible_by(request.user):
+        course = Course.objects.get(key=key)
+        if private_check and not course.is_accessible_by(request.user):
             raise ObjectDoesNotExist()
     except ObjectDoesNotExist:
         return generic_message(request, _('No such course'),
-                               _('Could not find a contest with the key "%s".') % key, status=404), False
-    return contest, True
+                               _('Could not find a course with the key "%s".') % key, status=404), False
+    return course, True
 
 
 class CourseListMixin(object):
@@ -98,7 +96,7 @@ class CourseList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, CourseLis
             editor_or_tester=Exists(Course.authors.through.objects.filter(course=OuterRef('pk'), profile=profile))
             .bitor(Exists(Course.curators.through.objects.filter(course=OuterRef('pk'), profile=profile)))
             .bitor(Exists(Course.testers.through.objects.filter(course=OuterRef('pk'), profile=profile))),
-            completed_contest=Exists(CourseParticipation.objects.filter(course=OuterRef('pk'), user=profile,
+            completed_course=Exists(CourseParticipation.objects.filter(course=OuterRef('pk'), user=profile,
                                                                          virtual=CourseParticipation.LIVE)),
         )
 
@@ -121,7 +119,7 @@ class CourseList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, CourseLis
 
         if self.request.user.is_authenticated:
             for participation in (
-                CourseParticipation.objects.filter(virtual=0, user=self.request.profile, contest_id__in=present)
+                CourseParticipation.objects.filter(virtual=0, user=self.request.profile, course_id__in=present)
                 .select_related('course')
                 .prefetch_related('course__authors', 'course__curators', 'course__testers', 'course__spectators')
                 .annotate(key=F('course__key'))
@@ -136,9 +134,9 @@ class CourseList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, CourseLis
         present.sort(key=attrgetter('end_time', 'key'))
         future.sort(key=attrgetter('start_time'))
         context['active_participations'] = active
-        context['current_contests'] = present
-        context['future_contests'] = future
-        context['finished_contests'] = finished
+        context['current_courses'] = present
+        context['future_courses'] = future
+        context['finished_courses'] = finished
         context['now'] = self._now
         context['first_page_href'] = '.'
         context['page_suffix'] = '#past-courses'
@@ -189,8 +187,8 @@ class CourseMixin(object):
         if self.request.user.is_authenticated:
             try:
                 context['live_participation'] = (
-                    self.request.profile.contest_history.get(
-                        contest=self.object,
+                    self.request.profile.course_history.get(
+                        course=self.object,
                         virtual=CourseParticipation.LIVE,
                     )
                 )
@@ -210,7 +208,7 @@ class CourseMixin(object):
         context['can_edit'] = self.can_edit
 
         if not self.object.og_image or not self.object.summary:
-            metadata = generate_opengraph('generated-meta-contest:%d' % self.object.id,
+            metadata = generate_opengraph('generated-meta-course:%d' % self.object.id,
                                           self.object.description, 'course')
         context['meta_description'] = self.object.summary or metadata[0]
         context['og_image'] = self.object.og_image or metadata[1]
@@ -226,7 +224,7 @@ class CourseMixin(object):
 
         profile = self.request.profile
         if (profile is not None and
-                CourseParticipation.objects.filter(id=profile.current_contest_id, course_id=course.id).exists()):
+                CourseParticipation.objects.filter(id=profile.current_course_id, course_id=course.id).exists()):
             return course
 
         try:
@@ -282,7 +280,7 @@ class CourseDetail(CourseMixin, TitleMixin, CommentedDetailView):
             ),
         }
         context['metadata'].update(
-            **self.object.contest_problems
+            **self.object.course_problems
             .annotate(
                 partials_enabled=F('partial').bitand(F('problem__partial')),
                 pretests_enabled=F('is_pretested').bitand(F('course__run_pretests_only')),
@@ -301,7 +299,7 @@ class CourseClone(CourseMixin, PermissionRequiredMixin, TitleMixin, SingleObject
     title = gettext_lazy('Clone Course')
     template_name = 'courses/clone.html'
     form_class = CourseCloneForm
-    permission_required = 'judge.clone_contest'
+    permission_required = 'judge.clone_course'
 
     def form_valid(self, form):
         course = self.object
@@ -331,7 +329,7 @@ class CourseClone(CourseMixin, PermissionRequiredMixin, TitleMixin, SingleObject
             course.authors.add(self.request.profile)
 
             for problem in course_problems:
-                problem.contest = course
+                problem.course = course
                 problem.pk = None
 
             for theory in course_theory:
@@ -349,7 +347,7 @@ class CourseClone(CourseMixin, PermissionRequiredMixin, TitleMixin, SingleObject
             revisions.set_user(self.request.user)
             revisions.set_comment(_('Cloned course from %s') % old_key)
 
-        return HttpResponseRedirect(reverse('admin:judge_contest_change', args=(course.id,)))
+        return HttpResponseRedirect(reverse('admin:judge_course_change', args=(course.id,)))
 
 
 class CourseAccessDenied(Exception):
@@ -441,7 +439,7 @@ class CourseJoin(LoginRequiredMixin, CourseMixin, SingleObjectMixin, View):
                         defaults={'real_start': timezone.now()},
                     )[0]
 
-        profile.current_contest = participation
+        profile.current_course = participation
         profile.save()
         course._updating_stats_only = True
         course.update_user_count()
@@ -469,8 +467,8 @@ class CourseLeave(LoginRequiredMixin, CourseMixin, SingleObjectMixin, View):
 
         profile = request.profile
         if profile.current_course is None or profile.current_course.course_id != course.id:
-            return generic_message(request, _('No such contest'),
-                                   _('You are not in contest "%s".') % course.key, 404)
+            return generic_message(request, _('No such course'),
+                                   _('You are not in course "%s".') % course.key, 404)
 
         profile.remove_course()
         return HttpResponseRedirect(reverse('course_view', args=(course.key,)))
@@ -501,14 +499,14 @@ class CourseCalendar(TitleMixin, CourseListMixin, TemplateView):
         courses = self.get_queryset().filter(Q(start_time__gte=start, start_time__lt=end) |
                                               Q(end_time__gte=start, end_time__lt=end))
         starts, ends, oneday = (defaultdict(list) for i in range(3))
-        for contest in courses:
-            start_date = timezone.localtime(contest.start_time).date()
-            end_date = timezone.localtime(contest.end_time - timedelta(seconds=1)).date()
+        for course in courses:
+            start_date = timezone.localtime(course.start_time).date()
+            end_date = timezone.localtime(course.end_time - timedelta(seconds=1)).date()
             if start_date == end_date:
-                oneday[start_date].append(contest)
+                oneday[start_date].append(course)
             else:
-                starts[start_date].append(contest)
-                ends[end_date].append(contest)
+                starts[start_date].append(course)
+                ends[end_date].append(course)
         return starts, ends, oneday
 
     def get_table(self):
@@ -559,7 +557,7 @@ class CourseCalendar(TitleMixin, CourseListMixin, TemplateView):
         return context
 
 
-class ContestICal(TitleMixin, CourseListMixin, BaseListView):
+class courseICal(TitleMixin, CourseListMixin, BaseListView):
     def generate_ical(self):
         cal = ICalendar()
         cal.add('prodid', '-//DMOJ//NONSGML Courses Calendar//')
@@ -567,13 +565,13 @@ class ContestICal(TitleMixin, CourseListMixin, BaseListView):
 
         now = timezone.now().astimezone(timezone.utc)
         domain = self.request.get_host()
-        for contest in self.get_queryset(): # TODO can be problem with it
+        for course in self.get_queryset(): # TODO can be problem with it
             event = Event()
-            event.add('uid', f'course-{contest.key}@{domain}')
-            event.add('summary', contest.name)
-            event.add('location', self.request.build_absolute_uri(contest.get_absolute_url()))
-            event.add('dtstart', contest.start_time.astimezone(timezone.utc))
-            event.add('dtend', contest.end_time.astimezone(timezone.utc))
+            event.add('uid', f'course-{course.key}@{domain}')
+            event.add('summary', course.name)
+            event.add('location', self.request.build_absolute_uri(course.get_absolute_url()))
+            event.add('dtstart', course.start_time.astimezone(timezone.utc))
+            event.add('dtend', course.end_time.astimezone(timezone.utc))
             event.add('dtstamp', now)
             cal.add_component(event)
         return cal.to_ical()
@@ -668,70 +666,17 @@ class CourseParticipationDisqualify(CourseMixin, SingleObjectMixin, View):
             pass
         else:
             participation.set_disqualified(not participation.is_disqualified)
-        return HttpResponseRedirect(reverse('contest_ranking', args=(self.object.key,)))
+        return HttpResponseRedirect(reverse('course_ranking', args=(self.object.key,)))
 
 
-class CourseMossMixin(CourseMixin, PermissionRequiredMixin):
-    permission_required = 'judge.moss_contest'
-
-    def get_object(self, queryset=None):
-        course = super().get_object(queryset)
-        if settings.MOSS_API_KEY is None or not course.is_editable_by(self.request.user):
-            raise Http404()
-        return course
-
-
-class CourseMossView(CourseMossMixin, TitleMixin, DetailView):
-    template_name = 'courses/moss.html'
-
-    def get_title(self):
-        return _('%s MOSS Results') % self.object.name
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        problems = list(map(attrgetter('problem'), self.object.contest_problems.order_by('order')
-                            .select_related('problem')))
-        languages = list(map(itemgetter(0), CourseMoss.LANG_MAPPING))
-
-        results = CourseMoss.objects.filter(course=self.object)
-        moss_results = defaultdict(list)
-        for result in results:
-            moss_results[result.problem].append(result)
-
-        for result_list in moss_results.values():
-            result_list.sort(key=lambda x: languages.index(x.language))
-
-        context['languages'] = languages
-        context['has_results'] = results.exists()
-        context['moss_results'] = [(problem, moss_results[problem]) for problem in problems]
-
-        return context
-
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        status = run_moss.delay(self.object.key)
-        return redirect_to_task_status(
-            status, message=_('Running MOSS for %s...') % (self.object.name,),
-            redirect=reverse('course_moss', args=(self.object.key,)),
-        )
-
-
-class CourseMossDelete(CourseMossMixin, SingleObjectMixin, View):
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        CourseMoss.objects.filter(contest=self.object).delete()
-        return HttpResponseRedirect(reverse('course_moss', args=(self.object.key,)))
-
-
-class ContestTagDetailAjax(DetailView):
-    model = ContestTag
+class CourseTagDetailAjax(DetailView):
+    model = CourseTag
     slug_field = slug_url_kwarg = 'name'
     context_object_name = 'tag'
     template_name = 'courses/tag-ajax.html'
 
 
-class ContestTagDetail(TitleMixin, ContestTagDetailAjax):
+class CourseTagDetail(TitleMixin, CourseTagDetailAjax):
     template_name = 'courses/tag.html'
 
     def get_title(self):

@@ -5,7 +5,7 @@ from django.utils.encoding import smart_str
 from django.views.generic.list import BaseListView
 
 from judge.jinja2.gravatar import gravatar
-from judge.models import Class, Comment, Contest, Organization, Problem, Profile, TheoryPost
+from judge.models import Class, Comment, Contest, Organization, Problem, Profile, TheoryPost, Course, TestPost
 
 
 def _get_user_queryset(term):
@@ -69,9 +69,20 @@ class TheorySelect2View(Select2View):
             .filter(Q(title__icontains=self.term) | Q(content__icontains=self.term))
 
 
+class TestSelect2View(Select2View):
+    def get_queryset(self):
+        return TestPost.objects.filter(title__icontains=self.term)
+
+
 class ContestSelect2View(Select2View):
     def get_queryset(self):
         return Contest.get_visible_contests(self.request.user) \
+                      .filter(Q(key__icontains=self.term) | Q(name__icontains=self.term))
+
+
+class CourseSelect2View(Select2View):
+    def get_queryset(self):
+        return Course.get_visible_courses(self.request.user) \
                       .filter(Q(key__icontains=self.term) | Q(name__icontains=self.term))
 
 
@@ -120,6 +131,16 @@ class ContestUserSearchSelect2View(UserSearchSelect2View):
             raise Http404()
 
         return Profile.objects.filter(contest_history__contest=contest,
+                                      user__username__icontains=self.term).distinct()
+
+
+class CourseUserSearchSelect2View(UserSearchSelect2View):
+    def get_queryset(self):
+        course = get_object_or_404(Course, key=self.kwargs['contest'])
+        if not course.is_accessible_by(self.request.user) or not course.can_see_full_scoreboard(self.request.user):
+            raise Http404()
+
+        return Profile.objects.filter(course_history__course=course,
                                       user__username__icontains=self.term).distinct()
 
 

@@ -13,8 +13,9 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from reversion.admin import VersionAdmin
 
 from django_ace import AceWidget
-from judge.models import Class, Contest, ContestProblem, ContestSubmission, Profile, Rating, Submission
-from judge.ratings import rate_contest
+from judge.models import Class, Profile, Rating, Submission, Course, \
+    CourseProblem
+from judge.models.course import CourseSubmission, CourseTheory, CourseTest
 from judge.utils.views import NoBatchDeleteMixin
 from judge.widgets import AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget, AdminMartorWidget, \
     AdminSelect2MultipleWidget, AdminSelect2Widget
@@ -26,72 +27,92 @@ class AdminHeavySelect2Widget(AdminHeavySelect2Widget):
         return False
 
 
-class ContestTagForm(ModelForm):
-    contests = ModelMultipleChoiceField(
-        label=_('Included contests'),
-        queryset=Contest.objects.all(),
+class CourseTagForm(ModelForm):
+    courses = ModelMultipleChoiceField(
+        label=_('Included courses'),
+        queryset=Course.objects.all(),
         required=False,
-        widget=AdminHeavySelect2MultipleWidget(data_view='contest_select2'))
+        widget=AdminHeavySelect2MultipleWidget(data_view='course_select2'))
 
 
-class ContestTagAdmin(admin.ModelAdmin):
-    fields = ('name', 'color', 'description', 'contests')
+class CourseTagAdmin(admin.ModelAdmin):
+    fields = ('name', 'color', 'description', 'courses')
     list_display = ('name', 'color')
     actions_on_top = True
     actions_on_bottom = True
-    form = ContestTagForm
+    form = CourseTagForm
     formfield_overrides = {
         TextField: {'widget': AdminMartorWidget},
     }
 
     def save_model(self, request, obj, form, change):
-        super(ContestTagAdmin, self).save_model(request, obj, form, change)
-        obj.contests.set(form.cleaned_data['contests'])
+        super(CourseTagAdmin, self).save_model(request, obj, form, change)
+        obj.courses.set(form.cleaned_data['courses'])
 
     def get_form(self, request, obj=None, **kwargs):
-        form = super(ContestTagAdmin, self).get_form(request, obj, **kwargs)
+        form = super(CourseTagAdmin, self).get_form(request, obj, **kwargs)
         if obj is not None:
-            form.base_fields['contests'].initial = obj.contests.all()
+            form.base_fields['courses'].initial = obj.courses.all()
         return form
 
 
-class ContestProblemInlineForm(ModelForm):
+class CourseProblemInlineForm(ModelForm):
     class Meta:
         widgets = {'problem': AdminHeavySelect2Widget(data_view='problem_select2')}
 
 
-class ContestProblemInline(SortableInlineAdminMixin, admin.TabularInline):
-    model = ContestProblem
+class CourseTheoryInlineForm(ModelForm):
+    class Meta:
+        widgets = {'theory': AdminHeavySelect2Widget(data_view='theory_select2')}
+
+
+class CourseTestInlineForm(ModelForm):
+    class Meta:
+        widgets = {'test': AdminHeavySelect2Widget(data_view='test_select2')}
+
+
+class CourseProblemInline(SortableInlineAdminMixin, admin.TabularInline):
+    model = CourseProblem
     verbose_name = _('Problem')
     verbose_name_plural = _('Problems')
     fields = ('problem', 'points', 'partial', 'is_pretested', 'max_submissions', 'output_prefix_override', 'order',
               'rejudge_column')
     readonly_fields = ('rejudge_column',)
-    form = ContestProblemInlineForm
+    form = CourseProblemInlineForm
 
     def rejudge_column(self, obj):
         if obj.id is None:
             return ''
         return format_html('<a class="button rejudge-link" href="{0}">{1}</a>',
-                           reverse('admin:judge_contest_rejudge', args=(obj.contest.id, obj.id)), _('Rejudge'))
+                           reverse('admin:judge_contest_rejudge', args=(obj.course.id, obj.id)), _('Rejudge'))
     rejudge_column.short_description = ''
 
 
-class ContestForm(ModelForm):
+class CourseTheoryInline(SortableInlineAdminMixin, admin.TabularInline):
+    model = CourseTheory
+    verbose_name = _('Theory')
+    verbose_name_plural = _('Theorys')
+    fields = ('theory', 'order',)
+    form = CourseTheoryInlineForm
+
+
+class CourseTestInline(SortableInlineAdminMixin, admin.TabularInline):
+    model = CourseTest
+    verbose_name = _('Test')
+    verbose_name_plural = _('Tests')
+    fields = ('test', 'order',)
+    form = CourseTestInlineForm
+
+
+class CourseForm(ModelForm):
     def __init__(self, *args, **kwargs):
-        super(ContestForm, self).__init__(*args, **kwargs)
-        if 'rate_exclude' in self.fields:
-            if self.instance and self.instance.id:
-                self.fields['rate_exclude'].queryset = \
-                    Profile.objects.filter(contest_history__contest=self.instance).distinct()
-            else:
-                self.fields['rate_exclude'].queryset = Profile.objects.none()
+        super(CourseForm, self).__init__(*args, **kwargs)
         self.fields['banned_users'].widget.can_add_related = False
-        self.fields['view_contest_scoreboard'].widget.can_add_related = False
+        self.fields['view_course_scoreboard'].widget.can_add_related = False
 
     def clean(self):
-        cleaned_data = super(ContestForm, self).clean()
-        cleaned_data['banned_users'].filter(current_contest__contest=self.instance).update(current_contest=None)
+        cleaned_data = super(CourseForm, self).clean()
+        cleaned_data['banned_users'].filter(current_course__course=self.instance).update(current_course=None)
 
     class Meta:
         widgets = {
@@ -99,7 +120,7 @@ class ContestForm(ModelForm):
             'curators': AdminHeavySelect2MultipleWidget(data_view='profile_select2'),
             'testers': AdminHeavySelect2MultipleWidget(data_view='profile_select2'),
             'spectators': AdminHeavySelect2MultipleWidget(data_view='profile_select2'),
-            'private_contestants': AdminHeavySelect2MultipleWidget(data_view='profile_select2',
+            'private_members': AdminHeavySelect2MultipleWidget(data_view='profile_select2',
                                                                    attrs={'style': 'width: 100%'}),
             'organizations': AdminHeavySelect2MultipleWidget(data_view='organization_select2'),
             'classes': AdminHeavySelect2MultipleWidget(data_view='class_select2'),
@@ -107,15 +128,16 @@ class ContestForm(ModelForm):
             'tags': AdminSelect2MultipleWidget,
             'banned_users': AdminHeavySelect2MultipleWidget(data_view='profile_select2',
                                                             attrs={'style': 'width: 100%'}),
-            'view_contest_scoreboard': AdminHeavySelect2MultipleWidget(data_view='profile_select2',
+            'view_course_scoreboard': AdminHeavySelect2MultipleWidget(data_view='profile_select2',
                                                                        attrs={'style': 'width: 100%'}),
-            'view_contest_submissions': AdminHeavySelect2MultipleWidget(data_view='profile_select2',
+            'view_course_submissions': AdminHeavySelect2MultipleWidget(data_view='profile_select2',
                                                                         attrs={'style': 'width: 100%'}),
-            'description': AdminMartorWidget(attrs={'data-markdownfy-url': reverse_lazy('contest_preview')}),
+            'description': AdminMartorWidget(attrs={'data-markdownfy-url': reverse_lazy('course_preview')}),
         }
 
 
-class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
+class CourseAdmin(NoBatchDeleteMixin, VersionAdmin):
+    # Add other field
     fieldsets = (
         (None, {'fields': ('key', 'name', 'authors', 'curators', 'testers', 'tester_see_submissions',
                            'tester_see_scoreboard', 'spectators')}),
@@ -125,24 +147,22 @@ class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
         (_('Scheduling'), {'fields': ('start_time', 'end_time', 'time_limit')}),
         (_('Details'), {'fields': ('description', 'og_image', 'logo_override_image', 'tags', 'summary')}),
         (_('Format'), {'fields': ('format_name', 'format_config', 'problem_label_script')}),
-        (_('Rating'), {'fields': ('is_rated', 'rate_all', 'rating_floor', 'rating_ceiling', 'rate_exclude')}),
-        (_('Access'), {'fields': ('access_code', 'private_contestants', 'organizations', 'classes',
-                                  'join_organizations', 'view_contest_scoreboard', 'view_contest_submissions')}),
+        (_('Access'), {'fields': ('access_code', 'private_members', 'organizations', 'classes',
+                                  'join_organizations', 'view_course_scoreboard', 'view_course_submissions')}),
         (_('Justice'), {'fields': ('banned_users',)}),
     )
-    list_display = ('key', 'name', 'is_visible', 'is_rated', 'locked_after', 'start_time', 'end_time', 'time_limit',
+    list_display = ('key', 'name', 'is_visible', 'locked_after', 'start_time', 'end_time', 'time_limit',
                     'user_count')
     search_fields = ('key', 'name')
-    inlines = [ContestProblemInline]
+    inlines = [CourseProblemInline, CourseTestInline, CourseTheoryInline]
     actions_on_top = True
     actions_on_bottom = True
-    form = ContestForm
+    form = CourseForm
     change_list_template = 'admin/judge/contest/change_list.html'
-    filter_horizontal = ['rate_exclude']
     date_hierarchy = 'start_time'
 
     def get_actions(self, request):
-        actions = super(ContestAdmin, self).get_actions(request)
+        actions = super(CourseAdmin, self).get_actions(request)
 
         if request.user.has_perm('judge.change_contest_visibility') or \
                 request.user.has_perm('judge.create_private_contest'):
@@ -156,7 +176,7 @@ class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
         return actions
 
     def get_queryset(self, request):
-        queryset = Contest.objects.all()
+        queryset = Course.objects.all()
         if request.user.has_perm('judge.edit_all_contest'):
             return queryset
         else:
@@ -164,14 +184,12 @@ class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         readonly = []
-        if not request.user.has_perm('judge.contest_rating'):
-            readonly += ['is_rated', 'rate_all', 'rate_exclude']
         if not request.user.has_perm('judge.lock_contest'):
             readonly += ['locked_after']
         if not request.user.has_perm('judge.contest_access_code'):
             readonly += ['access_code']
         if not request.user.has_perm('judge.create_private_contest'):
-            readonly += ['private_contestants', 'organizations']
+            readonly += ['private_members', 'organizations']
             if not request.user.has_perm('judge.change_contest_visibility'):
                 readonly += ['is_visible']
         if not request.user.has_perm('judge.contest_problem_label'):
@@ -181,8 +199,8 @@ class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
     def save_model(self, request, obj, form, change):
         # `private_contestants` and `organizations` will not appear in `cleaned_data` if user cannot edit it
         if form.changed_data:
-            if 'private_contestants' in form.changed_data:
-                obj.is_private = bool(form.cleaned_data['private_contestants'])
+            if 'private_members' in form.changed_data:
+                obj.is_private = bool(form.cleaned_data['private_members'])
             if 'organizations' in form.changed_data or 'classes' in form.changed_data:
                 obj.is_organization_private = bool(form.cleaned_data['organizations'] or form.cleaned_data['classes'])
             if 'join_organizations' in form.cleaned_data:
@@ -218,34 +236,34 @@ class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
             return True
         return obj.is_editable_by(request.user)
 
-    def _rescore(self, contest_key):
-        from judge.tasks import rescore_contest
-        transaction.on_commit(rescore_contest.s(contest_key).delay)
+    def _rescore(self, course_key):
+        from judge.tasks import rescore_course
+        transaction.on_commit(rescore_course.s(course_key).delay)
 
     def make_visible(self, request, queryset):
         if not request.user.has_perm('judge.change_contest_visibility'):
             queryset = queryset.filter(Q(is_private=True) | Q(is_organization_private=True))
         count = queryset.update(is_visible=True)
-        self.message_user(request, ngettext('%d contest successfully marked as visible.',
-                                            '%d contests successfully marked as visible.',
+        self.message_user(request, ngettext('%d course successfully marked as visible.',
+                                            '%d courses successfully marked as visible.',
                                             count) % count)
-    make_visible.short_description = _('Mark contests as visible')
+    make_visible.short_description = _('Mark courses as visible')
 
     def make_hidden(self, request, queryset):
         if not request.user.has_perm('judge.change_contest_visibility'):
             queryset = queryset.filter(Q(is_private=True) | Q(is_organization_private=True))
         count = queryset.update(is_visible=True)
-        self.message_user(request, ngettext('%d contest successfully marked as hidden.',
-                                            '%d contests successfully marked as hidden.',
+        self.message_user(request, ngettext('%d course successfully marked as hidden.',
+                                            '%d courses successfully marked as hidden.',
                                             count) % count)
-    make_hidden.short_description = _('Mark contests as hidden')
+    make_hidden.short_description = _('Mark courses as hidden')
 
     def set_locked(self, request, queryset):
         for row in queryset:
             self.set_locked_after(row, timezone.now())
         count = queryset.count()
-        self.message_user(request, ngettext('%d contest successfully locked.',
-                                            '%d contests successfully locked.',
+        self.message_user(request, ngettext('%d course successfully locked.',
+                                            '%d courses successfully locked.',
                                             count) % count)
     set_locked.short_description = _('Lock contest submissions')
 
@@ -253,58 +271,36 @@ class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
         for row in queryset:
             self.set_locked_after(row, None)
         count = queryset.count()
-        self.message_user(request, ngettext('%d contest successfully unlocked.',
-                                            '%d contests successfully unlocked.',
+        self.message_user(request, ngettext('%d course successfully unlocked.',
+                                            '%d courses successfully unlocked.',
                                             count) % count)
-    set_unlocked.short_description = _('Unlock contest submissions')
+    set_unlocked.short_description = _('Unlock course submissions')
 
-    def set_locked_after(self, contest, locked_after):
+    def set_locked_after(self, course, locked_after):
         with transaction.atomic():
-            contest.locked_after = locked_after
-            contest.save()
-            Submission.objects.filter(contest_object=contest,
-                                      contest__participation__virtual=0).update(locked_after=locked_after)
+            course.locked_after = locked_after
+            course.save()
+            Submission.objects.filter(course_object=course,
+                                      course__participation__virtual=0).update(locked_after=locked_after)
 
     def get_urls(self):
         return [
-            path('rate/all/', self.rate_all_view, name='judge_contest_rate_all'),
-            path('<int:id>/rate/', self.rate_view, name='judge_contest_rate'),
-            path('<int:contest_id>/judge/<int:problem_id>/', self.rejudge_view, name='judge_contest_rejudge'),
-        ] + super(ContestAdmin, self).get_urls()
+            path('<int:course_id>/judge/<int:problem_id>/', self.rejudge_view, name='judge_contest_rejudge'),
+        ] + super(CourseAdmin, self).get_urls()
 
-    def rejudge_view(self, request, contest_id, problem_id):
-        queryset = ContestSubmission.objects.filter(problem_id=problem_id).select_related('submission')
+    def rejudge_view(self, request, course_id, problem_id):
+        queryset = CourseSubmission.objects.filter(problem_id=problem_id).select_related('submission')
         for model in queryset:
             model.submission.judge(rejudge=True, rejudge_user=request.user)
 
         self.message_user(request, ngettext('%d submission was successfully scheduled for rejudging.',
                                             '%d submissions were successfully scheduled for rejudging.',
                                             len(queryset)) % len(queryset))
-        return HttpResponseRedirect(reverse('admin:judge_contest_change', args=(contest_id,)))
+        return HttpResponseRedirect(reverse('admin:judge_contest_change', args=(course_id,)))
 
-    def rate_all_view(self, request):
-        if not request.user.has_perm('judge.contest_rating'):
-            raise PermissionDenied()
-        with transaction.atomic():
-            with connection.cursor() as cursor:
-                cursor.execute('TRUNCATE TABLE `%s`' % Rating._meta.db_table)
-            Profile.objects.update(rating=None)
-            for contest in Contest.objects.filter(is_rated=True, end_time__lte=timezone.now()).order_by('end_time'):
-                rate_contest(contest)
-        return HttpResponseRedirect(reverse('admin:judge_contest_changelist'))
-
-    def rate_view(self, request, id):
-        if not request.user.has_perm('judge.contest_rating'):
-            raise PermissionDenied()
-        contest = get_object_or_404(Contest, id=id)
-        if not contest.is_rated or not contest.ended:
-            raise Http404()
-        with transaction.atomic():
-            contest.rate()
-        return HttpResponseRedirect(request.META.get('HTTP_REFERER', reverse('admin:judge_contest_changelist')))
 
     def get_form(self, request, obj=None, **kwargs):
-        form = super(ContestAdmin, self).get_form(request, obj, **kwargs)
+        form = super(CourseAdmin, self).get_form(request, obj, **kwargs)
         if 'problem_label_script' in form.base_fields:
             # form.base_fields['problem_label_script'] does not exist when the user has only view permission
             # on the model.
@@ -322,26 +318,26 @@ class ContestAdmin(NoBatchDeleteMixin, VersionAdmin):
         return form
 
 
-class ContestParticipationForm(ModelForm):
+class CourseParticipationForm(ModelForm):
     class Meta:
         widgets = {
-            'contest': AdminSelect2Widget(),
+            'course': AdminSelect2Widget(),
             'user': AdminHeavySelect2Widget(data_view='profile_select2'),
         }
 
 
-class ContestParticipationAdmin(admin.ModelAdmin):
-    fields = ('contest', 'user', 'real_start', 'virtual', 'is_disqualified')
-    list_display = ('contest', 'username', 'show_virtual', 'real_start', 'score', 'cumtime', 'tiebreaker')
+class CourseParticipationAdmin(admin.ModelAdmin):
+    fields = ('course', 'user', 'real_start', 'virtual', 'is_disqualified')
+    list_display = ('course', 'username', 'show_virtual', 'real_start', 'score', 'cumtime', 'tiebreaker')
     actions = ['recalculate_results']
     actions_on_bottom = actions_on_top = True
-    search_fields = ('contest__key', 'contest__name', 'user__user__username')
-    form = ContestParticipationForm
+    search_fields = ('course__key', 'course__name', 'user__user__username')
+    form = CourseParticipationForm
     date_hierarchy = 'real_start'
 
     def get_queryset(self, request):
-        return super(ContestParticipationAdmin, self).get_queryset(request).only(
-            'contest__name', 'contest__format_name', 'contest__format_config',
+        return super(CourseParticipationAdmin, self).get_queryset(request).only(
+            'course__name', 'course__format_name', 'course__format_config',
             'user__user__username', 'real_start', 'score', 'cumtime', 'tiebreaker', 'virtual',
         )
 

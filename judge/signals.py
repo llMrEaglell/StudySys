@@ -79,6 +79,16 @@ def contest_update(sender, instance, **kwargs):
                        for engine in EFFECTIVE_MATH_ENGINES])
 
 
+@receiver(post_save, sender=Contest)
+def contest_update(sender, instance, **kwargs):
+    if hasattr(instance, '_updating_stats_only'):
+        return
+
+    cache.delete_many(['generated-meta-contest:%d' % instance.id] +
+                      [make_template_fragment_key('course_html', (instance.id, engine))
+                       for engine in EFFECTIVE_MATH_ENGINES])
+
+
 @receiver(post_save, sender=License)
 def license_update(sender, instance, **kwargs):
     cache.delete(make_template_fragment_key('license_html', (instance.id,)))

@@ -87,6 +87,10 @@ class Submission(models.Model):
     is_pretested = models.BooleanField(verbose_name=_('was ran on pretests only'), default=False)
     contest_object = models.ForeignKey('Contest', verbose_name=_('contest'), null=True, blank=True,
                                        on_delete=models.SET_NULL, related_name='+', db_index=False)
+
+    course_object = models.ForeignKey('Course', verbose_name=_('course'), null=True, blank=True,
+                                       on_delete=models.SET_NULL, related_name='+', db_index=False)
+
     locked_after = models.DateTimeField(verbose_name=_('submission lock'), null=True, blank=True)
 
     @classmethod

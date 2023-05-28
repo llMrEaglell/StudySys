@@ -16,7 +16,7 @@ from django.utils.translation import gettext_lazy as _, ngettext_lazy
 
 from django_ace import AceWidget
 from judge.models import Contest, Language, Organization, Problem, ProblemPointsVote, Profile, Submission, \
-    WebAuthnCredential
+    WebAuthnCredential, Course
 from judge.utils.subscription import newsletter_id
 from judge.widgets import HeavyPreviewPageDownWidget, Select2MultipleWidget, Select2Widget
 
@@ -285,6 +285,16 @@ class ContestCloneForm(Form):
         key = self.cleaned_data['key']
         if Contest.objects.filter(key=key).exists():
             raise ValidationError(_('Contest with key already exists.'))
+        return key
+
+
+class CourseCloneForm(Form):
+    key = CharField(max_length=20, validators=[RegexValidator('^[a-z0-9]+$', _('Course id must be ^[a-z0-9]+$'))])
+
+    def clean_key(self):
+        key = self.cleaned_data['key']
+        if Course.objects.filter(key=key).exists():
+            raise ValidationError(_('Course with key already exists.'))
         return key
 
 

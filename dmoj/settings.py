@@ -206,6 +206,14 @@ else:
                         'judge.ContestTag',
                     ],
                 },
+                {
+                    'model': 'judge.Course',
+                    'icon': 'fa-bar-chart',
+                    'children': [
+                        'judge.CourseParticipation',
+                        'judge.Course',
+                    ],
+                },
                 ('judge.Ticket', 'fa-bell'),
                 {
                     'model': 'auth.User',
