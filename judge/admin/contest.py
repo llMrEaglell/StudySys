@@ -55,6 +55,27 @@ class ContestTagAdmin(admin.ModelAdmin):
         return form
 
 
+class CourseTagAdmin(admin.ModelAdmin):
+    fields = ('name', 'color', 'description', 'courses')
+    list_display = ('name', 'color')
+    actions_on_top = True
+    actions_on_bottom = True
+    form = ContestTagForm
+    formfield_overrides = {
+        TextField: {'widget': AdminMartorWidget},
+    }
+
+    def save_model(self, request, obj, form, change):
+        super(CourseTagAdmin, self).save_model(request, obj, form, change)
+        obj.courses.set(form.cleaned_data['courses'])
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super(CourseTagAdmin, self).get_form(request, obj, **kwargs)
+        if obj is not None:
+            form.base_fields['courses'].initial = obj.courses.all()
+        return form
+
+
 class ContestProblemInlineForm(ModelForm):
     class Meta:
         widgets = {'problem': AdminHeavySelect2Widget(data_view='problem_select2')}
