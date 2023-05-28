@@ -11,7 +11,7 @@ from mptt.models import MPTTModel
 
 from judge.models.profile import Profile
 
-__all__ = ['MiscConfig', 'validate_regex', 'NavigationBar', 'BlogPost', 'TheoryPost', 'TheoryPostGroup']
+__all__ = ['MiscConfig', 'validate_regex', 'NavigationBar', 'BlogPost']
 
 
 class MiscConfig(models.Model):
@@ -100,81 +100,3 @@ class BlogPost(models.Model):
         verbose_name = _('blog post')
         verbose_name_plural = _('blog posts')
 
-
-class TheoryPostGroup(models.Model):
-    name = models.CharField(max_length=20, verbose_name=_('theory group ID'), unique=True)
-    full_name = models.CharField(max_length=100, verbose_name=_('theory group name'))
-
-    def __str__(self):
-        return self.full_name
-
-    class Meta:
-        ordering = ['full_name']
-        verbose_name = _('theory group')
-        verbose_name_plural = _('theory groups')
-
-
-class TheoryPost(models.Model):
-    title = models.CharField(verbose_name=_('theory title'), max_length=100)
-    authors = models.ManyToManyField(Profile, verbose_name=_('authors'), blank=True)
-    slug = models.SlugField(verbose_name=_('slug'))
-    visible = models.BooleanField(verbose_name=_('public visibility'), default=False)
-    sticky = models.BooleanField(verbose_name=_('sticky'), default=False)
-    publish_on = models.DateTimeField(verbose_name=_('publish after'))
-    content = models.TextField(verbose_name=_('theory content'))
-    summary = models.TextField(verbose_name=_('theory summary'), blank=True)
-    og_image = models.CharField(verbose_name=_('OpenGraph image'), default='', max_length=150, blank=True)
-
-    @classmethod
-    def get_public_posts(cls, user):
-        return cls.objects.filter(visible=True).defer('content')
-
-    def __str__(self):
-        return self.title
-
-    def get_absolute_url(self):
-        return reverse('theory_post', args=(self.id, self.slug))
-
-    def can_see(self, user):
-        if self.visible and self.publish_on <= timezone.now():
-            return True
-        return self.is_editable_by(user)
-
-    def is_editable_by(self, user):
-        if not user.is_authenticated:
-            return False
-        if user.has_perm('judge.edit_all_post'):
-            return True
-        return user.has_perm('judge.change_blogpost') and self.authors.filter(id=user.profile.id).exists()
-
-    class Meta:
-        permissions = (
-            ('edit_all_post', _('Edit all posts')),
-            ('change_post_visibility', _('Edit post visibility')),
-        )
-        verbose_name = _('theory post')
-        verbose_name_plural = _('theory posts')
-
-
-class TestPost(models.Model):
-    title = models.CharField(verbose_name=_('test title'), max_length=100)
-    # <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc22xFNhH_BweIoXR30kacF09azZkPPBftMj3jDG_0gx7NrXg/viewform?embedded=true" width="640" height="382" frameborder="0" marginheight="0" marginwidth="0">Завантаження…</iframe>
-    # https://docs.google.com/forms/d/e/1FAIpQLSc22xFNhH_BweIoXR30kacF09azZkPPBftMj3jDG_0gx7NrXg/viewform?usp=sf_link
-    form = models.URLField(verbose_name=_('form'))
-    # regex for get form id(group 5): (https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])(/forms/d/e/)([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])\/(viewform)
-    authors = models.ManyToManyField(Profile, verbose_name=_('authors'), blank=True)
-
-    def is_editable_by(self, user):
-        if not user.is_authenticated:
-            return False
-        if user.has_perm('judge.edit_all_post'):
-            return True
-        return user.has_perm('judge.change_blogpost') and self.authors.filter(id=user.profile.id).exists()
-
-    class Meta:
-        permissions = (
-            ('edit_all_post', _('Edit all posts')),
-            ('change_post_visibility', _('Edit post visibility')),
-        )
-        verbose_name = _('test post')
-        verbose_name_plural = _('test posts')

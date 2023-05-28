@@ -9,8 +9,7 @@ from mptt.admin import DraggableMPTTAdmin
 from reversion.admin import VersionAdmin
 
 from judge.dblock import LockModel
-from judge.models import BlogPost, NavigationBar
-from judge.models.interface import TheoryPost, TestPost
+from judge.models import BlogPost, NavigationBar, TheoryPost, TestPost
 from judge.widgets import AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget, AdminMartorWidget
 
 

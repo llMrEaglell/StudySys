@@ -8,8 +8,7 @@ from django.views.generic import ListView
 
 from judge.comments import CommentedDetailView
 from judge.models import BlogPost, Comment, Contest, Language, Problem, ProblemClarification, Profile, Submission, \
-    Ticket
-from judge.models.interface import TheoryPost, TestPost
+    Ticket, TheoryPost, TestPost
 from judge.utils.cachedict import CacheDict
 from judge.utils.diggpaginator import DiggPaginator
 from judge.utils.opengraph import generate_opengraph

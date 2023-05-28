@@ -5,8 +5,7 @@ from django.utils.encoding import smart_str
 from django.views.generic.list import BaseListView
 
 from judge.jinja2.gravatar import gravatar
-from judge.models import Class, Comment, Contest, Organization, Problem, Profile
-from judge.models.interface import TheoryPost
+from judge.models import Class, Comment, Contest, Organization, Problem, Profile, TheoryPost
 
 
 def _get_user_queryset(term):

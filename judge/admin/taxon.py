@@ -2,8 +2,7 @@ from django.contrib import admin
 from django.forms import ModelForm, ModelMultipleChoiceField
 from django.utils.translation import gettext_lazy as _
 
-from judge.models import Problem
-from judge.models.interface import TheoryPost
+from judge.models import Problem, TheoryPost
 from judge.widgets import AdminHeavySelect2MultipleWidget
 
 

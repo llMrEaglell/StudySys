@@ -12,7 +12,8 @@ from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
 
 from judge.models.contest import Contest
-from judge.models.interface import BlogPost, TheoryPost
+from judge.models.course import TheoryPost
+from judge.models.interface import BlogPost
 from judge.models.problem import Problem, Solution
 from judge.models.profile import Profile
 from judge.utils.cachedict import CacheDict

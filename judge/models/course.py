@@ -8,17 +8,14 @@ from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 from jsonfield import JSONField
 from lupa import LuaRuntime
-from moss import MOSS_LANG_C, MOSS_LANG_CC, MOSS_LANG_JAVA, MOSS_LANG_PYTHON
 
 from judge import contest_format
-from judge.models import TheoryPost
-from judge.models.interface import TestPost
 from judge.models.problem import Problem
 from judge.models.profile import Class, Organization, Profile
 from judge.models.submission import Submission
 from judge.ratings import rate_contest
 
-__all__ = ['Course', 'CourseTag', 'CourseParticipation', 'CourseProblem', 'CourseSubmission', 'CourseRating']
+__all__ = ['Course', 'CourseTag', 'CourseParticipation', 'CourseProblem', 'CourseSubmission', 'TheoryPost', 'TheoryPostGroup']
 
 
 class MinValueOrNoneValidator(MinValueValidator):
@@ -53,6 +50,72 @@ class CourseTag(models.Model):
     class Meta:
         verbose_name = _('course tag')
         verbose_name_plural = _('course tags')
+
+
+class TestPost(models.Model):
+    title = models.CharField(verbose_name=_('test title'), max_length=100)
+    # <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc22xFNhH_BweIoXR30kacF09azZkPPBftMj3jDG_0gx7NrXg/viewform?embedded=true" width="640" height="382" frameborder="0" marginheight="0" marginwidth="0">Завантаження…</iframe>
+    # https://docs.google.com/forms/d/e/1FAIpQLSc22xFNhH_BweIoXR30kacF09azZkPPBftMj3jDG_0gx7NrXg/viewform?usp=sf_link
+    form = models.URLField(verbose_name=_('form'))
+    # regex for get form id(group 5): (https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])(/forms/d/e/)([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])\/(viewform)
+    authors = models.ManyToManyField(Profile, verbose_name=_('authors'), blank=True)
+
+    def is_editable_by(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.has_perm('judge.edit_all_post'):
+            return True
+        return user.has_perm('judge.change_blogpost') and self.authors.filter(id=user.profile.id).exists()
+
+    class Meta:
+        permissions = (
+            ('edit_all_post', _('Edit all posts')),
+            ('change_post_visibility', _('Edit post visibility')),
+        )
+        verbose_name = _('test post')
+        verbose_name_plural = _('test posts')
+
+
+class TheoryPost(models.Model):
+    title = models.CharField(verbose_name=_('theory title'), max_length=100)
+    authors = models.ManyToManyField(Profile, verbose_name=_('authors'), blank=True)
+    slug = models.SlugField(verbose_name=_('slug'))
+    visible = models.BooleanField(verbose_name=_('public visibility'), default=False)
+    sticky = models.BooleanField(verbose_name=_('sticky'), default=False)
+    publish_on = models.DateTimeField(verbose_name=_('publish after'))
+    content = models.TextField(verbose_name=_('theory content'))
+    summary = models.TextField(verbose_name=_('theory summary'), blank=True)
+    og_image = models.CharField(verbose_name=_('OpenGraph image'), default='', max_length=150, blank=True)
+
+    @classmethod
+    def get_public_posts(cls, user):
+        return cls.objects.filter(visible=True).defer('content')
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        return reverse('theory_post', args=(self.id, self.slug))
+
+    def can_see(self, user):
+        if self.visible and self.publish_on <= timezone.now():
+            return True
+        return self.is_editable_by(user)
+
+    def is_editable_by(self, user):
+        if not user.is_authenticated:
+            return False
+        if user.has_perm('judge.edit_all_post'):
+            return True
+        return user.has_perm('judge.change_blogpost') and self.authors.filter(id=user.profile.id).exists()
+
+    class Meta:
+        permissions = (
+            ('edit_all_post', _('Edit all posts')),
+            ('change_post_visibility', _('Edit post visibility')),
+        )
+        verbose_name = _('theory post')
+        verbose_name_plural = _('theory posts')
 
 
 class Course(models.Model):
@@ -103,8 +166,6 @@ class Course(models.Model):
                                      help_text=_('Should be set even for organization-private courses, where it '
                                                  'determines whether the course is visible to members of the '
                                                  'specified organizations.'))
-    is_rated = models.BooleanField(verbose_name=_('course rated'), help_text=_('Whether this course can be rated.'),
-                                   default=False)
     view_course_scoreboard = models.ManyToManyField(Profile, verbose_name=_('view course scoreboard'), blank=True,
                                                      related_name='view_course_scoreboard',
                                                      help_text=_('These users will be able to view the scoreboard.'))
@@ -118,14 +179,6 @@ class Course(models.Model):
     use_clarifications = models.BooleanField(verbose_name=_('no comments'),
                                              help_text=_('Use clarification system instead of comments.'),
                                              default=True)
-    rating_floor = models.IntegerField(verbose_name=_('rating floor'),
-                                       help_text=_('Do not rate users who have a lower rating.'), null=True, blank=True)
-    rating_ceiling = models.IntegerField(verbose_name=_('rating ceiling'),
-                                         help_text=_('Do not rate users who have a higher rating.'),
-                                         null=True, blank=True)
-    rate_all = models.BooleanField(verbose_name=_('rate all'), help_text=_('Rate all users who joined.'), default=False)
-    rate_exclude = models.ManyToManyField(Profile, verbose_name=_('exclude from ratings'), blank=True,
-                                          related_name='rate_exclude+')
     is_private = models.BooleanField(verbose_name=_('private to specific users'), default=False)
     private_members = models.ManyToManyField(Profile, blank=True, verbose_name=_('private members'),
                                                  help_text=_('If non-empty, only these users may see the course.'),
@@ -151,7 +204,7 @@ class Course(models.Model):
     limit_join_organizations = models.BooleanField(verbose_name=_('limit organizations that can join'), default=False)
     join_organizations = models.ManyToManyField(Organization, blank=True, verbose_name=_('join organizations'),
                                                 help_text=_('If non-empty, only these organizations may join '
-                                                            'the course.'), related_name='join_only_contests')
+                                                            'the course.'), related_name='join_only_courses')
     classes = models.ManyToManyField(Class, blank=True, verbose_name=_('classes'),
                                      help_text=_('If organization private, only these classes may see the course.'))
     og_image = models.CharField(verbose_name=_('OpenGraph image'), default='', max_length=150, blank=True)
@@ -475,14 +528,6 @@ class Course(models.Model):
             queryset = queryset.filter(q)
         return queryset.distinct()
 
-    def rate(self):
-        with transaction.atomic():
-            CourseRating.objects.filter(contest__end_time__range=(self.end_time, self._now)).delete()
-            for contest in Course.objects.filter(
-                is_rated=True, end_time__range=(self.end_time, self._now),
-            ).order_by('end_time'):
-                rate_contest(contest)
-
     class Meta:
         permissions = (
             ('see_private_contest', _('See private contests')),
@@ -530,11 +575,9 @@ class CourseParticipation(models.Model):
     def set_disqualified(self, disqualified):
         self.is_disqualified = disqualified
         self.recompute_results()
-        if self.course.is_rated and self.course.ratings.exists():
-            self.course.rate()
         if self.is_disqualified:
-            if self.user.current_contest == self:
-                self.user.remove_contest()
+            if self.user.current_course == self:
+                self.user.remove_course()
             self.course.banned_users.add(self.user)
         else:
             self.course.banned_users.remove(self.user)
@@ -583,18 +626,18 @@ class CourseParticipation(models.Model):
 
     def __str__(self):
         if self.spectate:
-            return _('%(user)s spectating in %(contest)s') % {'user': self.user.username, 'contest': self.course.name}
+            return _('%(user)s spectating in %(contest)s') % {'user': self.user.username, 'course': self.course.name}
         if self.virtual:
             return _('%(user)s in %(contest)s, v%(id)d') % {
                 'user': self.user.username, 'contest': self.course.name, 'id': self.virtual,
             }
-        return _('%(user)s in %(contest)s') % {'user': self.user.username, 'contest': self.course.name}
+        return _('%(user)s in %(contest)s') % {'user': self.user.username, 'course': self.course.name}
 
     class Meta:
         verbose_name = _('course participation')
         verbose_name_plural = _('course participations')
 
-        unique_together = ('contest', 'user', 'virtual')
+        unique_together = ('course', 'user', 'virtual')
 
 
 class CourseProblem(models.Model):
@@ -637,38 +680,39 @@ class CourseSubmission(models.Model):
         verbose_name_plural = _('course submissions')
 
 
-class CourseRating(models.Model):
-    user = models.ForeignKey(Profile, verbose_name=_('user'), related_name='ratings', on_delete=CASCADE)
-    course = models.ForeignKey(Course, verbose_name=_('course'), related_name='ratings', on_delete=CASCADE)
-    participation = models.OneToOneField(CourseParticipation, verbose_name=_('participation'),
-                                         related_name='rating', on_delete=CASCADE)
-    rank = models.IntegerField(verbose_name=_('rank'))
-    rating = models.IntegerField(verbose_name=_('rating'))
-    mean = models.FloatField(verbose_name=_('raw rating'))
-    performance = models.FloatField(verbose_name=_('course performance'))
-    last_rated = models.DateTimeField(db_index=True, verbose_name=_('last rated'))
+class TheoryPostGroup(models.Model):
+    name = models.CharField(max_length=20, verbose_name=_('theory group ID'), unique=True)
+    full_name = models.CharField(max_length=100, verbose_name=_('theory group name'))
+
+    def __str__(self):
+        return self.full_name
 
     class Meta:
-        unique_together = ('user', 'course')
-        verbose_name = _('course rating')
-        verbose_name_plural = _('course ratings')
+        ordering = ['full_name']
+        verbose_name = _('theory group')
+        verbose_name_plural = _('theory groups')
 
 
-class CourseMoss(models.Model):
-    LANG_MAPPING = [
-        ('C', MOSS_LANG_C),
-        ('C++', MOSS_LANG_CC),
-        ('Java', MOSS_LANG_JAVA),
-        ('Python', MOSS_LANG_PYTHON),
-    ]
-
-    course = models.ForeignKey(Course, verbose_name=_('course'), related_name='moss', on_delete=CASCADE)
-    problem = models.ForeignKey(Problem, verbose_name=_('problem'), related_name='moss', on_delete=CASCADE)
-    language = models.CharField(max_length=10)
-    submission_count = models.PositiveIntegerField(default=0)
-    url = models.URLField(null=True, blank=True)
+class CourseTheory(models.Model):
+    theory = models.ForeignKey(TheoryPost, verbose_name=_('theory'), related_name='courses', on_delete=CASCADE)
+    course = models.ForeignKey(Course, verbose_name=_('course'), related_name='course_theorys', on_delete=CASCADE)
+    order = models.PositiveIntegerField(db_index=True, verbose_name=_('order'))
 
     class Meta:
-        unique_together = ('course', 'problem', 'language')
-        verbose_name = _('course moss result')
-        verbose_name_plural = _('course moss results')
+        unique_together = ('theory', 'course')
+        verbose_name = _('course theory')
+        verbose_name_plural = _('course theorys')
+        ordering = ('order',)
+
+
+class CourseTest(models.Model):
+    test = models.ForeignKey(TestPost, verbose_name=_('test'), related_name='courses', on_delete=CASCADE)
+    course = models.ForeignKey(Course, verbose_name=_('course'), related_name='course_tests', on_delete=CASCADE)
+    order = models.PositiveIntegerField(db_index=True, verbose_name=_('order'))
+
+    class Meta:
+        unique_together = ('test', 'course')
+        verbose_name = _('course test')
+        verbose_name_plural = _('course tests')
+        ordering = ('order',)
+

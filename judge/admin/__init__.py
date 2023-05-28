@@ -16,8 +16,7 @@ from judge.admin.ticket import TicketAdmin
 from judge.models import BlogPost, Class, Comment, CommentLock, Contest, ContestParticipation, \
     ContestTag, Judge, Language, License, MiscConfig, NavigationBar, Organization, \
     OrganizationRequest, Problem, ProblemGroup, ProblemPointsVote, ProblemType, Profile, Submission, Ticket
-from judge.models.course import CourseTag
-from judge.models.interface import TheoryPost, TheoryPostGroup, TestPost
+from judge.models.course import CourseTag, TheoryPost, TestPost, TheoryPostGroup
 
 admin.site.register(BlogPost, BlogPostAdmin)
 admin.site.register(TheoryPost, TheoryPostAdmin)
