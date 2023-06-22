@@ -530,9 +530,9 @@ class Course(models.Model):
             q &= (
                 Q(view_course_scoreboard=user.profile) |
                 Q(is_organization_private=False, is_private=False) |
-                Q(is_organization_private=False, is_private=True, private_contestants=user.profile) |
+                Q(is_organization_private=False, is_private=True, private_members=user.profile) |
                 (Q(is_organization_private=True, is_private=False) & org_check) |
-                (Q(is_organization_private=True, is_private=True, private_contestants=user.profile) & org_check)
+                (Q(is_organization_private=True, is_private=True, private_members=user.profile) & org_check)
             )
 
             q |= Q(authors=user.profile)
