@@ -1,0 +1,93 @@
+{% extends "tabs-base.html" %}
+
+{% block tabs %}
+    {{ make_tab('detail', 'fa-info-circle', url('course_view', course.key), _('Info')) }}
+    {% if course.ended or can_edit %}
+        {{ make_tab('stats', 'fa-pie-chart', url('course_stats', course.key), _('Statistics')) }}
+    {% endif %}
+
+    {% if course.start_time <= now or perms.judge.see_private_contest %}
+        {% if course.can_see_own_scoreboard(request.user) %}
+            {{ make_tab('ranking', 'fa-bar-chart', url('course_ranking', course.key), _('Rankings')) }}
+            {% if request.user.is_authenticated %}
+                {{ make_tab('participation', 'fa-users', url('course_participation_own', course.key), _('Participation')) }}
+            {% endif %}
+        {% else %}
+            {{ make_tab('ranking', 'fa-bar-chart', None, _('Hidden Rankings')) }}
+        {% endif %}
+    {% endif %}
+    {% if can_edit %}
+        {% if perms.judge.moss_contest and has_moss_api_key %}
+            {{ make_tab('moss', 'fa-gavel', url('course_moss', course.key), _('MOSS')) }}
+        {% endif %}
+        {{ make_tab('edit', 'fa-edit', url('admin:judge_course_change', course.id), _('Edit')) }}
+    {% endif %}
+    {% if perms.judge.clone_contest %}
+        {{ make_tab('clone', 'fa-copy', url('course_clone', course.key), _('Clone')) }}
+    {% endif %}
+
+    {% if request.user.is_authenticated %}
+        {% if course.started or is_editor or is_tester %}
+            {% set in_course = course.is_in_course(request.user) %}
+            {% if course.ended %}
+                {# Allow users to leave the virtual course #}
+                {% if in_course %}
+                    <form action="{{ url('course_leave', course.key) }}" method="post"
+                          class="contest-join-pseudotab unselectable button">
+                        {% csrf_token %}
+                        <input type="submit" class="leaving-forever" value="{{ _('Leave course') }}">
+                    </form>
+                {% else %}
+                    {# Allow users to virtual join #}
+                    <form action="{{ url('course_join', course.key) }}" method="post"
+                          class="contest-join-pseudotab unselectable button">
+                        {% csrf_token %}
+                        <input type="submit" value="{{ _('Virtual join') }}" class="contest-join">
+                    </form>
+                {% endif %}
+            {% else %}
+                {# Allow users to leave the course #}
+                {% if in_course %}
+                    <form action="{{ url('course_leave', course.key) }}" method="post"
+                          class="contest-join-pseudotab unselectable button">
+                        {% csrf_token %}
+                        <input type="submit" value="
+                            {%- if request.participation.spectate %}
+                                {{- _('Stop spectating') -}}
+                            {% else %}
+                                {{- _('Leave course') -}}
+                            {% endif %}">
+                    </form>
+                {% elif course.is_live_joinable_by(request.user) %}
+                    <form action="{{ url('course_join', course.key) }}" method="post"
+                          class="contest-join-pseudotab unselectable button">
+                        {% csrf_token %}
+                        <input type="submit"
+                               class="contest-join{% if not has_joined %} first-join{% endif %}"
+                               value="{{ _('Join course') }}">
+                    </form>
+                {% elif course.is_spectatable_by(request.user) %}
+                    <form action="{{ url('course_join', course.key) }}" method="post"
+                          class="contest-join-pseudotab unselectable button">
+                        {% csrf_token %}
+                        <input type="submit" value="{{ _('Spectate course') }}" class="contest-join">
+                    </form>
+                {% else %}
+                    <form action="{{ url('course_join', course.key) }}" method="post"
+                          class="contest-join-pseudotab unselectable button disabled">
+                        {% csrf_token %}
+                        <input type="submit" class="disabled"
+                               title="{{ _('You cannot join this course.') }}"
+                               value="{{ _('Join course') }}" disabled>
+                    </form>
+                {% endif %}
+            {% endif %}
+        {% endif %}
+    {% elif course.started %}
+        <form action="{{ url('auth_login') }}" method="get"
+              class="contest-join-pseudotab unselectable button">
+            <input type="hidden" name="next" value="{{ LOGIN_RETURN_PATH|urlencode }}">
+            <input type="submit" value="{{ _('Log in to participate') }}">
+        </form>
+    {% endif %}
+{% endblock %}

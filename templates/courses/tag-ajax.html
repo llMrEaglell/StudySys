@@ -1,0 +1,7 @@
+{% if not title %}
+    {% include "courses/tag-title.html" %}
+    <br><br>
+    <hr>
+{% endif %}
+
+{{ tag.description|markdown('course_tag') }}

@@ -20,7 +20,8 @@ from judge.views.problem_data import ProblemDataView, ProblemSubmissionDiff, \
 from judge.views.register import ActivationView, RegistrationView
 from judge.views.select2 import AssigneeSelect2View, ClassSelect2View, CommentSelect2View, ContestSelect2View, \
     ContestUserSearchSelect2View, OrganizationSelect2View, ProblemSelect2View, TicketUserSelect2View, \
-    UserSearchSelect2View, UserSelect2View, TheorySelect2View, TestSelect2View, CourseSelect2View
+    UserSearchSelect2View, UserSelect2View, TheorySelect2View, TestSelect2View, CourseSelect2View, \
+    CourseUserSearchSelect2View
 from judge.views.widgets import martor_image_uploader
 
 admin.autodiscover()
@@ -332,6 +333,8 @@ urlpatterns = [
             path('user_search', UserSearchSelect2View.as_view(), name='user_search_select2_ajax'),
             path('contest_users/<str:contest>', ContestUserSearchSelect2View.as_view(),
                  name='contest_user_search_select2_ajax'),
+            path('course_users/<str:contest>', CourseUserSearchSelect2View.as_view(),
+                 name='course_user_search_select2_ajax'),
             path('ticket_user', TicketUserSelect2View.as_view(), name='ticket_user_select2_ajax'),
             path('ticket_assignee', AssigneeSelect2View.as_view(), name='ticket_assignee_select2_ajax'),
         ])),

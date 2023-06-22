@@ -663,7 +663,7 @@ CourseRankingProfile = namedtuple(
 BestSolutionData = namedtuple('BestSolutionData', 'code points time state is_pretested')
 
 
-def make_course_ranking_profile(course, participation, contest_problems):
+def make_course_ranking_profile(course, participation, course_problems):
     def display_user_problem(course_problem):
         # When the contest format is changed, `format_data` might be invalid.
         # This will cause `display_user_problem` to error, so we display '???' instead.
@@ -682,8 +682,8 @@ def make_course_ranking_profile(course, participation, contest_problems):
         cumtime=participation.cumtime,
         tiebreaker=participation.tiebreaker,
         organization=user.organization,
-        participation_rating=participation.rating.rating if hasattr(participation, 'rating') else None,
-        problem_cells=[display_user_problem(contest_problem) for contest_problem in contest_problems],
+        participation_rating=participation.rating.rating if hasattr(participation, 'course_rating') else None,
+        problem_cells=[display_user_problem(course_problem) for course_problem in course_problems],
         result_cell=course.format.display_participation_result(participation),
         participation=participation,
         display_name=user.display_name,
@@ -692,18 +692,18 @@ def make_course_ranking_profile(course, participation, contest_problems):
 
 def base_course_ranking_list(course, problems, queryset):
     return [make_course_ranking_profile(course, participation, problems) for participation in
-            queryset.select_related('user__user', 'rating').defer('user__about', 'user__organizations__about')]
+            queryset.select_related('user__user', 'course_rating').defer('user__about', 'user__organizations__about')]
 
 
-def course_ranking_list(contest, problems):
-    return base_course_ranking_list(contest, problems, contest.users.filter(virtual=0)
+def course_ranking_list(course, problems):
+    return base_course_ranking_list(course, problems, course.users.filter(virtual=0)
                                     .prefetch_related('user__organizations')
                                     .order_by('is_disqualified', '-score', 'cumtime', 'tiebreaker'))
 
 
 def get_course_ranking_list(request, course, participation=None, ranking_list=course_ranking_list,
                             show_current_virtual=True, ranker=ranker):
-    problems = list(course.contest_problems.select_related('problem').defer('problem__description').order_by('order'))
+    problems = list(course.course_problems.select_related('problem').defer('problem__description').order_by('order'))
 
     users = ranker(ranking_list(course, problems), key=attrgetter('points', 'cumtime', 'tiebreaker'))
 
@@ -729,8 +729,8 @@ def course_ranking_ajax(request, course, participation=None):
     return render(request, 'courses/ranking-table.html', {
         'users': users,
         'problems': problems,
-        'contest': course,
-        'has_rating': course.ratings.exists(),
+        'course': course,
+        'has_rating': course.course_ratings.exists(),
     })
 
 
@@ -780,7 +780,7 @@ class CourseRanking(CourseRankingBase):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['has_rating'] = self.object.ratings.exists()
+        context['has_rating'] = self.object.course_ratings.exists()
         return context
 
 

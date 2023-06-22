@@ -136,7 +136,7 @@ class ContestUserSearchSelect2View(UserSearchSelect2View):
 
 class CourseUserSearchSelect2View(UserSearchSelect2View):
     def get_queryset(self):
-        course = get_object_or_404(Course, key=self.kwargs['contest'])
+        course = get_object_or_404(Course, key=self.kwargs['course'])
         if not course.is_accessible_by(self.request.user) or not course.can_see_full_scoreboard(self.request.user):
             raise Http404()
 
