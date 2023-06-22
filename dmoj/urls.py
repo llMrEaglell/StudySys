@@ -235,7 +235,7 @@ urlpatterns = [
     ])),
 
     path('course/<str:course>', include([
-        path('', courses.CourseDetail.as_view(), name='contest_view'),
+        path('', courses.CourseDetail.as_view(), name='course_view'),
         # path('/moss', courses.CourseMossView.as_view(), name='contest_moss'),
         # path('/moss/delete', courses.ContestMossDelete.as_view(), name='contest_moss_delete'),
         path('/clone', courses.CourseClone.as_view(), name='course_clone'),

@@ -145,9 +145,9 @@ class Course(models.Model):
     tester_see_scoreboard = models.BooleanField(verbose_name=_('testers see scoreboard'), default=False,
                                                 help_text=_('If testers can see the scoreboard.'))
     tester_see_submissions = models.BooleanField(verbose_name=_('testers see submissions'), default=False,
-                                                 help_text=_('If testers can see in-contest submissions.'))
+                                                 help_text=_('If testers can see in-course submissions.'))
     spectators = models.ManyToManyField(Profile, verbose_name=_('spectators'),
-                                        help_text=_('These users will be able to spectate the contest, '
+                                        help_text=_('These users will be able to spectate the course, '
                                                     'but not see the problems ahead of time.'),
                                         blank=True, related_name='spectated_courses')
     description = models.TextField(verbose_name=_('description'), blank=True)
@@ -176,7 +176,7 @@ class Course(models.Model):
     view_course_submissions = models.ManyToManyField(Profile, verbose_name=_('can see course submissions'),
                                                       blank=True, related_name='view_course_submissions',
                                                       help_text=_('These users will be able '
-                                                                  'to see in-contest submissions.'))
+                                                                  'to see in-course submissions.'))
     scoreboard_visibility = models.CharField(verbose_name=_('scoreboard visibility'), default=SCOREBOARD_VISIBLE,
                                              help_text=_('Scoreboard visibility through the duration of the course.'),
                                              max_length=1, choices=SCOREBOARD_VISIBILITY)
@@ -205,12 +205,12 @@ class Course(models.Model):
                                                default=False)
     run_pretests_only = models.BooleanField(verbose_name=_('run pretests only'),
                                             help_text=_('Whether judges should grade pretests only, versus all '
-                                                        'testcases. Commonly set during a contest, then unset '
-                                                        'prior to rejudging user submissions when the contest ends.'),
+                                                        'testcases. Commonly set during a course, then unset '
+                                                        'prior to rejudging user submissions when the course ends.'),
                                             default=False)
     show_short_display = models.BooleanField(verbose_name=_('show short form settings display'),
                                              help_text=_('Whether to show a section containing course settings '
-                                                         'on the contest page or not.'),
+                                                         'on the course page or not.'),
                                              default=False)
     is_organization_private = models.BooleanField(verbose_name=_('private to organizations'), default=False)
     organizations = models.ManyToManyField(Organization, blank=True, verbose_name=_('organizations'),
@@ -231,8 +231,8 @@ class Course(models.Model):
     summary = models.TextField(blank=True, verbose_name=_('course summary'),
                                help_text=_('Plain-text, shown in meta description tag, e.g. for social media.'))
     access_code = models.CharField(verbose_name=_('access code'), blank=True, default='', max_length=255,
-                                   help_text=_('An optional code to prompt contestants before they are allowed '
-                                               'to join the contest. Leave it blank to disable.'))
+                                   help_text=_('An optional code to prompt course before they are allowed '
+                                               'to join the course. Leave it blank to disable.'))
     banned_users = models.ManyToManyField(Profile, verbose_name=_('personae non gratae'), blank=True,
                                           help_text=_('Bans the selected users from joining this course.'))
     format_name = models.CharField(verbose_name=_('contest format'), default='default', max_length=32,
@@ -273,7 +273,7 @@ class Course(models.Model):
     def clean(self):
         # Django will complain if you didn't fill in start_time or end_time, so we don't have to.
         if self.start_time and self.end_time and self.start_time >= self.end_time:
-            raise ValidationError('What is this? A contest that ended before it starts?')
+            raise ValidationError('What is this? A course that ended before it starts?')
         self.format_class.validate(self.format_config)
 
         try:
@@ -281,10 +281,10 @@ class Course(models.Model):
             # so test it to see if the script returns a valid label.
             label = self.get_label_for_problem(0)
         except Exception as e:
-            raise ValidationError('Contest problem label script: %s' % e)
+            raise ValidationError('Course problem label script: %s' % e)
         else:
             if not isinstance(label, str):
-                raise ValidationError('Contest problem label script: script should return a string.')
+                raise ValidationError('Course problem label script: script should return a string.')
 
     def is_in_course(self, user):
         if user.is_authenticated:
@@ -337,7 +337,7 @@ class Course(models.Model):
         return self.scoreboard_visibility != self.SCOREBOARD_HIDDEN
 
     @property
-    def contest_window_length(self):
+    def course_window_length(self):
         return self.end_time - self.start_time
 
     @cached_property
@@ -369,20 +369,20 @@ class Course(models.Model):
 
     @cached_property
     def author_ids(self):
-        return Course.authors.through.objects.filter(contest=self).values_list('profile_id', flat=True)
+        return Course.authors.through.objects.filter(course=self).values_list('profile_id', flat=True)
 
     @cached_property
     def editor_ids(self):
         return self.author_ids.union(
-            Course.curators.through.objects.filter(contest=self).values_list('profile_id', flat=True))
+            Course.curators.through.objects.filter(course=self).values_list('profile_id', flat=True))
 
     @cached_property
     def tester_ids(self):
-        return Course.testers.through.objects.filter(contest=self).values_list('profile_id', flat=True)
+        return Course.testers.through.objects.filter(course=self).values_list('profile_id', flat=True)
 
     @cached_property
     def spectator_ids(self):
-        return Course.spectators.through.objects.filter(contest=self).values_list('profile_id', flat=True)
+        return Course.spectators.through.objects.filter(course=self).values_list('profile_id', flat=True)
 
     def __str__(self):
         return self.name
@@ -528,7 +528,7 @@ class Course(models.Model):
                          Q(classes__in=user.profile.classes.all()))
             q = Q(is_visible=True)
             q &= (
-                Q(view_contest_scoreboard=user.profile) |
+                Q(view_course_scoreboard=user.profile) |
                 Q(is_organization_private=False, is_private=False) |
                 Q(is_organization_private=False, is_private=True, private_contestants=user.profile) |
                 (Q(is_organization_private=True, is_private=False) & org_check) |
@@ -650,12 +650,12 @@ class CourseParticipation(models.Model):
 
     def __str__(self):
         if self.spectate:
-            return _('%(user)s spectating in %(contest)s') % {'user': self.user.username, 'course': self.course.name}
+            return _('%(user)s spectating in %(course)s') % {'user': self.user.username, 'course': self.course.name}
         if self.virtual:
-            return _('%(user)s in %(contest)s, v%(id)d') % {
-                'user': self.user.username, 'contest': self.course.name, 'id': self.virtual,
+            return _('%(user)s in %(course)s, v%(id)d') % {
+                'user': self.user.username, 'course': self.course.name, 'id': self.virtual,
             }
-        return _('%(user)s in %(contest)s') % {'user': self.user.username, 'course': self.course.name}
+        return _('%(user)s in %(course)s') % {'user': self.user.username, 'course': self.course.name}
 
     class Meta:
         verbose_name = _('course participation')
@@ -749,7 +749,7 @@ class CourseRating(models.Model):
     rank = models.IntegerField(verbose_name=_('rank'))
     rating = models.IntegerField(verbose_name=_('rating'))
     mean = models.FloatField(verbose_name=_('raw rating'))
-    performance = models.FloatField(verbose_name=_('contest performance'))
+    performance = models.FloatField(verbose_name=_('course performance'))
     last_rated = models.DateTimeField(db_index=True, verbose_name=_('last rated'))
 
     class Meta:

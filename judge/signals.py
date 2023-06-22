@@ -10,7 +10,7 @@ from django.dispatch import receiver
 
 from .caching import finished_submission
 from .models import BlogPost, Comment, Contest, ContestSubmission, EFFECTIVE_MATH_ENGINES, Judge, Language, License, \
-    MiscConfig, Organization, Problem, Profile, Submission, WebAuthnCredential, TheoryPost
+    MiscConfig, Organization, Problem, Profile, Submission, WebAuthnCredential, TheoryPost, Course
 
 
 def get_pdf_path(basename: str) -> Optional[str]:
@@ -79,12 +79,12 @@ def contest_update(sender, instance, **kwargs):
                        for engine in EFFECTIVE_MATH_ENGINES])
 
 
-@receiver(post_save, sender=Contest)
-def contest_update(sender, instance, **kwargs):
+@receiver(post_save, sender=Course)
+def course_update(sender, instance, **kwargs):
     if hasattr(instance, '_updating_stats_only'):
         return
 
-    cache.delete_many(['generated-meta-contest:%d' % instance.id] +
+    cache.delete_many(['generated-meta-course:%d' % instance.id] +
                       [make_template_fragment_key('course_html', (instance.id, engine))
                        for engine in EFFECTIVE_MATH_ENGINES])
 

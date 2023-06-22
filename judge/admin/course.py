@@ -15,7 +15,8 @@ from reversion.admin import VersionAdmin
 from django_ace import AceWidget
 from judge.models import Class, Profile, Rating, Submission, Course, \
     CourseProblem
-from judge.models.course import CourseSubmission, CourseTheory, CourseTest
+from judge.models.course import CourseSubmission, CourseTheory, CourseTest, CourseRating
+from judge.ratings import rate_course
 from judge.utils.views import NoBatchDeleteMixin
 from judge.widgets import AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget, AdminMartorWidget, \
     AdminSelect2MultipleWidget, AdminSelect2Widget
@@ -147,6 +148,7 @@ class CourseAdmin(NoBatchDeleteMixin, VersionAdmin):
         (_('Scheduling'), {'fields': ('start_time', 'end_time', 'time_limit')}),
         (_('Details'), {'fields': ('description', 'og_image', 'logo_override_image', 'tags', 'summary')}),
         (_('Format'), {'fields': ('format_name', 'format_config', 'problem_label_script')}),
+        (_('Rating'), {'fields': ('is_rated', 'rate_all', 'rating_floor', 'rating_ceiling', 'rate_exclude')}),
         (_('Access'), {'fields': ('access_code', 'private_members', 'organizations', 'classes',
                                   'join_organizations', 'view_course_scoreboard', 'view_course_submissions')}),
         (_('Justice'), {'fields': ('banned_users',)}),
@@ -159,6 +161,7 @@ class CourseAdmin(NoBatchDeleteMixin, VersionAdmin):
     actions_on_bottom = True
     form = CourseForm
     change_list_template = 'admin/judge/contest/change_list.html'
+    filter_horizontal = ['rate_exclude']
     date_hierarchy = 'start_time'
 
     def get_actions(self, request):
@@ -298,6 +301,26 @@ class CourseAdmin(NoBatchDeleteMixin, VersionAdmin):
                                             len(queryset)) % len(queryset))
         return HttpResponseRedirect(reverse('admin:judge_contest_change', args=(course_id,)))
 
+    def rate_all_view(self, request):
+        if not request.user.has_perm('judge.contest_rating'):
+            raise PermissionDenied()
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute('TRUNCATE TABLE `%s`' % CourseRating._meta.db_table)
+            Profile.objects.update(rating=None)
+            for course in Course.objects.filter(is_rated=True, end_time__lte=timezone.now()).order_by('end_time'):
+                rate_course(course)
+        return HttpResponseRedirect(reverse('admin:judge_contest_changelist'))
+
+    def rate_view(self, request, id):
+        if not request.user.has_perm('judge.contest_rating'):
+            raise PermissionDenied()
+        course = get_object_or_404(Course, id=id)
+        if not course.is_rated or not course.ended:
+            raise Http404()
+        with transaction.atomic():
+            course.rate()
+        return HttpResponseRedirect(request.META.get('HTTP_REFERER', reverse('admin:judge_contest_changelist')))
 
     def get_form(self, request, obj=None, **kwargs):
         form = super(CourseAdmin, self).get_form(request, obj, **kwargs)

@@ -43,7 +43,7 @@ from judge.utils.views import DiggPaginatorMixin, QueryStringSortMixin, SingleOb
     generic_message
 
 __all__ = ['CourseList', 'CourseDetail', 'CourseJoin', 'CourseLeave', 'CourseCalendar',
-           'CourseClone', 'CourseStats', 'CourseParticipationDisqualify', 'contest_ranking_ajax',
+           'CourseClone', 'CourseStats', 'CourseParticipationDisqualify', 'course_ranking_ajax',
            'CourseParticipationList', 'get_course_ranking_list',
            'base_course_ranking_list']
 

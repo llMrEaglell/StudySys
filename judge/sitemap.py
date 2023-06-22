@@ -40,7 +40,7 @@ class ContestSitemap(Sitemap):
         return reverse('contest_view', args=obj)
 
 
-class CoursetSitemap(Sitemap):
+class CourseSitemap(Sitemap):
     changefreq = 'hourly'
     priority = 0.7
 
