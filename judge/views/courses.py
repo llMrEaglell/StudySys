@@ -22,6 +22,7 @@ from django.utils.functional import cached_property
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.timezone import make_aware
+from judge.utils.ranker import ranker
 from django.utils.translation import gettext as _, gettext_lazy
 from django.views.generic import ListView, TemplateView
 from django.views.generic.detail import DetailView, SingleObjectMixin, View
@@ -31,11 +32,10 @@ from reversion import revisions
 
 from judge import event_poster as event
 from judge.comments import CommentedDetailView
-from judge.models import Submission, Problem
+from judge.forms import CourseCloneForm
+from judge.models import Submission, Problem, Profile
 from judge.models.course import Course, CourseParticipation, CourseProblem, CourseTheory, CourseTest, \
     CourseTag
-from judge.tasks import run_moss
-from judge.utils.celery import redirect_to_task_status
 from judge.utils.opengraph import generate_opengraph
 from judge.utils.problems import _get_result_data
 from judge.utils.stats import get_bar_chart, get_pie_chart
@@ -43,7 +43,9 @@ from judge.utils.views import DiggPaginatorMixin, QueryStringSortMixin, SingleOb
     generic_message
 
 __all__ = ['CourseList', 'CourseDetail', 'CourseJoin', 'CourseLeave', 'CourseCalendar',
-           'CourseClone', 'CourseStats', 'CourseParticipationDisqualify']
+           'CourseClone', 'CourseStats', 'CourseParticipationDisqualify', 'contest_ranking_ajax',
+           'CourseParticipationList', 'get_course_ranking_list',
+           'base_course_ranking_list']
 
 
 def _find_course(request, key, private_check=True):
@@ -76,7 +78,6 @@ class CourseList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, CourseLis
     def _now(self):
         return timezone.now()
 
-    @property
     def _get_queryset(self):
         queryset = super().get_queryset().prefetch_related(
             'tags',
@@ -97,11 +98,11 @@ class CourseList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, CourseLis
             .bitor(Exists(Course.curators.through.objects.filter(course=OuterRef('pk'), profile=profile)))
             .bitor(Exists(Course.testers.through.objects.filter(course=OuterRef('pk'), profile=profile))),
             completed_course=Exists(CourseParticipation.objects.filter(course=OuterRef('pk'), user=profile,
-                                                                         virtual=CourseParticipation.LIVE)),
+                                                                       virtual=CourseParticipation.LIVE)),
         )
 
     def get_queryset(self):
-        return self._get_queryset.order_by(self.order, 'key').filter(end_time__lt=self._now)
+        return self._get_queryset().order_by(self.order, 'key').filter(end_time__lt=self._now)
 
     def get_paginator(self, queryset, per_page, orphans=0, allow_empty_first_page=True, **kwargs):
         return super().get_paginator(queryset, per_page, orphans, allow_empty_first_page,
@@ -111,7 +112,7 @@ class CourseList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, CourseLis
         context = super(CourseList, self).get_context_data(**kwargs)
         present, active, future = [], [], []
         finished = set()
-        for course in self._get_queryset.exclude(end_time__lt=self._now):
+        for course in self._get_queryset().exclude(end_time__lt=self._now):
             if course.start_time > self._now:
                 future.append(course)
             else:
@@ -119,10 +120,11 @@ class CourseList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, CourseLis
 
         if self.request.user.is_authenticated:
             for participation in (
-                CourseParticipation.objects.filter(virtual=0, user=self.request.profile, course_id__in=present)
-                .select_related('course')
-                .prefetch_related('course__authors', 'course__curators', 'course__testers', 'course__spectators')
-                .annotate(key=F('course__key'))
+                    CourseParticipation.objects.filter(virtual=0, user=self.request.profile, course_id__in=present)
+                            .select_related('course')
+                            .prefetch_related('course__authors', 'course__curators', 'course__testers',
+                                              'course__spectators')
+                            .annotate(key=F('course__key'))
             ):
                 if participation.ended:
                     finished.add(participation.course.key)
@@ -269,10 +271,10 @@ class CourseDetail(CourseMixin, TitleMixin, CommentedDetailView):
         context['course_problems'] = Problem.objects.filter(courses__course=self.object) \
             .order_by('courses__order').defer('description') \
             .annotate(has_public_editorial=Case(
-                When(solution__is_public=True, solution__publish_on__lte=timezone.now(), then=True),
-                default=False,
-                output_field=BooleanField(),
-            )) \
+            When(solution__is_public=True, solution__publish_on__lte=timezone.now(), then=True),
+            default=False,
+            output_field=BooleanField(),
+        )) \
             .add_i18n_name(self.request.LANGUAGE_CODE)
         context['metadata'] = {
             'has_public_editorials': any(
@@ -341,7 +343,7 @@ class CourseClone(CourseMixin, PermissionRequiredMixin, TitleMixin, SingleObject
                 test.pk = None
 
             CourseProblem.objects.bulk_create(course_problems)
-            CourseTheory.objects.bulk_create(course_theory) # TODO dont remember implemt it
+            CourseTheory.objects.bulk_create(course_theory)  # TODO dont remember implemt it
             CourseTest.objects.bulk_create(course_tests)
 
             revisions.set_user(self.request.user)
@@ -497,7 +499,7 @@ class CourseCalendar(TitleMixin, CourseListMixin, TemplateView):
     def get_course_data(self, start, end):
         end += timedelta(days=1)
         courses = self.get_queryset().filter(Q(start_time__gte=start, start_time__lt=end) |
-                                              Q(end_time__gte=start, end_time__lt=end))
+                                             Q(end_time__gte=start, end_time__lt=end))
         starts, ends, oneday = (defaultdict(list) for i in range(3))
         for course in courses:
             start_date = timezone.localtime(course.start_time).date()
@@ -512,7 +514,7 @@ class CourseCalendar(TitleMixin, CourseListMixin, TemplateView):
     def get_table(self):
         calendar = Calendar(self.firstweekday).monthdatescalendar(self.year, self.month)
         starts, ends, oneday = self.get_course_data(make_aware(datetime.combine(calendar[0][0], time.min)),
-                                                     make_aware(datetime.combine(calendar[-1][-1], time.min)))
+                                                    make_aware(datetime.combine(calendar[-1][-1], time.min)))
         return [[CourseDay(
             date=date, is_pad=date.month != self.month,
             is_today=date == self.today, starts=starts[date], ends=ends[date], oneday=oneday[date],
@@ -557,7 +559,7 @@ class CourseCalendar(TitleMixin, CourseListMixin, TemplateView):
         return context
 
 
-class courseICal(TitleMixin, CourseListMixin, BaseListView):
+class CourseICal(TitleMixin, CourseListMixin, BaseListView):
     def generate_ical(self):
         cal = ICalendar()
         cal.add('prodid', '-//DMOJ//NONSGML Courses Calendar//')
@@ -565,7 +567,7 @@ class courseICal(TitleMixin, CourseListMixin, BaseListView):
 
         now = timezone.now().astimezone(timezone.utc)
         domain = self.request.get_host()
-        for course in self.get_queryset(): # TODO can be problem with it
+        for course in self.get_queryset():  # TODO can be problem with it
             event = Event()
             event.add('uid', f'course-{course.key}@{domain}')
             event.add('summary', course.name)
@@ -647,7 +649,172 @@ class CourseStats(TitleMixin, CourseMixin, DetailView):
         return context
 
 
+CourseRankingProfile = namedtuple(
+    'CourseRankingProfile',
+    'id user css_class username points cumtime tiebreaker organization participation '
+    'participation_rating problem_cells result_cell display_name',
+)
+
 BestSolutionData = namedtuple('BestSolutionData', 'code points time state is_pretested')
+
+
+def make_course_ranking_profile(course, participation, contest_problems):
+    def display_user_problem(course_problem):
+        # When the contest format is changed, `format_data` might be invalid.
+        # This will cause `display_user_problem` to error, so we display '???' instead.
+        try:
+            return course.format.display_user_problem(participation, course_problem)
+        except (KeyError, TypeError, ValueError):
+            return mark_safe('<td>???</td>')
+
+    user = participation.user
+    return CourseRankingProfile(
+        id=user.id,
+        user=user.user,
+        css_class=user.css_class,
+        username=user.username,
+        points=participation.score,
+        cumtime=participation.cumtime,
+        tiebreaker=participation.tiebreaker,
+        organization=user.organization,
+        participation_rating=participation.rating.rating if hasattr(participation, 'rating') else None,
+        problem_cells=[display_user_problem(contest_problem) for contest_problem in contest_problems],
+        result_cell=course.format.display_participation_result(participation),
+        participation=participation,
+        display_name=user.display_name,
+    )
+
+
+def base_course_ranking_list(course, problems, queryset):
+    return [make_course_ranking_profile(course, participation, problems) for participation in
+            queryset.select_related('user__user', 'rating').defer('user__about', 'user__organizations__about')]
+
+
+def course_ranking_list(contest, problems):
+    return base_course_ranking_list(contest, problems, contest.users.filter(virtual=0)
+                                    .prefetch_related('user__organizations')
+                                    .order_by('is_disqualified', '-score', 'cumtime', 'tiebreaker'))
+
+
+def get_course_ranking_list(request, course, participation=None, ranking_list=course_ranking_list,
+                            show_current_virtual=True, ranker=ranker):
+    problems = list(course.contest_problems.select_related('problem').defer('problem__description').order_by('order'))
+
+    users = ranker(ranking_list(course, problems), key=attrgetter('points', 'cumtime', 'tiebreaker'))
+
+    if show_current_virtual:
+        if participation is None and request.user.is_authenticated:
+            participation = request.profile.current_course
+            if participation is None or participation.course_id != course.id:
+                participation = None
+        if participation is not None and participation.virtual:
+            users = chain([('-', make_course_ranking_profile(course, participation, problems))], users)
+    return users, problems
+
+
+def course_ranking_ajax(request, course, participation=None):
+    course, exists = _find_course(request, course)
+    if not exists:
+        return HttpResponseBadRequest('Invalid course', content_type='text/plain')
+
+    if not course.can_see_full_scoreboard(request.user):
+        raise Http404()
+
+    users, problems = get_course_ranking_list(request, course, participation)
+    return render(request, 'courses/ranking-table.html', {
+        'users': users,
+        'problems': problems,
+        'contest': course,
+        'has_rating': course.ratings.exists(),
+    })
+
+
+class CourseRankingBase(CourseMixin, TitleMixin, DetailView):
+    template_name = 'courses/ranking.html'
+    tab = None
+
+    def get_title(self):
+        raise NotImplementedError()
+
+    def get_content_title(self):
+        return self.object.name
+
+    def get_ranking_list(self):
+        raise NotImplementedError()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        if not self.object.can_see_own_scoreboard(self.request.user):
+            raise Http404()
+
+        users, problems = self.get_ranking_list()
+        context['users'] = users
+        context['problems'] = problems
+        context['last_msg'] = event.last()
+        context['tab'] = self.tab
+        return context
+
+
+class CourseRanking(CourseRankingBase):
+    tab = 'ranking'
+
+    def get_title(self):
+        return _('%s Rankings') % self.object.name
+
+    def get_ranking_list(self):
+        if not self.object.can_see_full_scoreboard(self.request.user):
+            queryset = self.object.users.filter(user=self.request.profile, virtual=CourseParticipation.LIVE)
+            return get_course_ranking_list(
+                self.request, self.object,
+                ranking_list=partial(base_course_ranking_list, queryset=queryset),
+                ranker=lambda users, key: ((_('???'), user) for user in users),
+            )
+
+        return get_course_ranking_list(self.request, self.object)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['has_rating'] = self.object.ratings.exists()
+        return context
+
+
+class CourseParticipationList(LoginRequiredMixin, CourseRankingBase):
+    tab = 'participation'
+
+    def get_title(self):
+        if self.profile == self.request.profile:
+            return _('Your participation in %(course)s') % {'course': self.object.name}
+        return _("%(user)s's participation in %(course)s") % {
+            'user': self.profile.username, 'course': self.object.name,
+        }
+
+    def get_ranking_list(self):
+        if not self.object.can_see_full_scoreboard(self.request.user) and self.profile != self.request.profile:
+            raise Http404()
+
+        queryset = self.object.users.filter(user=self.profile, virtual__gte=0).order_by('-virtual')
+        live_link = format_html('<a href="{2}#!{1}">{0}</a>', _('Live'), self.profile.username,
+                                reverse('course_ranking', args=[self.object.key]))
+
+        return get_course_ranking_list(
+            self.request, self.object, show_current_virtual=False,
+            ranking_list=partial(base_course_ranking_list, queryset=queryset),
+            ranker=lambda users, key: ((user.participation.virtual or live_link, user) for user in users))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['has_rating'] = False
+        context['now'] = timezone.now()
+        context['rank_header'] = _('Participation')
+        return context
+
+    def get(self, request, *args, **kwargs):
+        if 'user' in kwargs:
+            self.profile = get_object_or_404(Profile, user__username=kwargs['user'])
+        else:
+            self.profile = self.request.profile
+        return super().get(request, *args, **kwargs)
 
 
 class CourseParticipationDisqualify(CourseMixin, SingleObjectMixin, View):

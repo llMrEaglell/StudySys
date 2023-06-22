@@ -8,7 +8,6 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.translation import gettext_lazy
 
-
 BETA2 = 328.33 ** 2
 RATING_INIT = 1200      # Newcomer's rating when applying the rating floor/ceiling
 MEAN_INIT = 1500.
@@ -188,6 +187,56 @@ def rate_contest(contest):
         Profile.objects.filter(contest_history__contest=contest, contest_history__virtual=0).update(
             rating=Subquery(Rating.objects.filter(user=OuterRef('id'))
                             .order_by('-contest__end_time').values('rating')[:1]))
+
+
+def rate_course(course):
+    from judge.models.course import CourseRating
+
+    rating_subquery = CourseRating.objects.filter(user=OuterRef('user'))
+    rating_sorted = rating_subquery.order_by('-course__end_time')
+    users = course.users.order_by('is_disqualified', '-score', 'cumtime', 'tiebreaker') \
+        .annotate(submissions=Count('submission'),
+                  last_rating=Coalesce(Subquery(rating_sorted.values('rating')[:1]), RATING_INIT),
+                  last_mean=Coalesce(Subquery(rating_sorted.values('mean')[:1]), MEAN_INIT),
+                  times=Coalesce(Subquery(rating_subquery.order_by().values('user_id')
+                                          .annotate(count=Count('id')).values('count')), 0)) \
+        .exclude(user_id__in=course.rate_exclude.all()) \
+        .filter(virtual=0).values('id', 'user_id', 'score', 'cumtime', 'tiebreaker',
+                                  'last_rating', 'last_mean', 'times')
+    if not course.rate_all:
+        users = users.filter(submissions__gt=0)
+    if course.rating_floor is not None:
+        users = users.exclude(last_rating__lt=course.rating_floor)
+    if course.rating_ceiling is not None:
+        users = users.exclude(last_rating__gt=course.rating_ceiling)
+
+    users = list(users)
+    participation_ids = list(map(itemgetter('id'), users))
+    user_ids = list(map(itemgetter('user_id'), users))
+    ranking = list(tie_ranker(users, key=itemgetter('score', 'cumtime', 'tiebreaker')))
+    old_mean = list(map(itemgetter('last_mean'), users))
+    times_ranked = list(map(itemgetter('times'), users))
+    historical_p = [[] for _ in users]
+
+    user_id_to_idx = {uid: i for i, uid in enumerate(user_ids)}
+    for h in CourseRating.objects.filter(user_id__in=user_ids) \
+            .order_by('-course__end_time') \
+            .values('user_id', 'performance'):
+        idx = user_id_to_idx[h['user_id']]
+        historical_p[idx].append(h['performance'])
+
+    rating, mean, performance = recalculate_ratings(ranking, old_mean, times_ranked, historical_p)
+
+    now = timezone.now()
+    ratings = [CourseRating(user_id=i, course=course, rating=r, mean=m, performance=perf,
+                      last_rated=now, participation_id=pid, rank=z)
+               for i, pid, r, m, perf, z in zip(user_ids, participation_ids, rating, mean, performance, ranking)]
+    with transaction.atomic():
+        CourseRating.objects.bulk_create(ratings)
+
+        CourseRating.objects.filter(course_history__course=course, course_history__virtual=0).update(
+            rating=Subquery(CourseRating.objects.filter(user=OuterRef('id'))
+                            .order_by('-course__end_time').values('rating')[:1]))
 
 
 RATING_LEVELS = [

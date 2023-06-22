@@ -13,9 +13,9 @@ from judge import contest_format
 from judge.models.problem import Problem
 from judge.models.profile import Class, Organization, Profile
 from judge.models.submission import Submission
-from judge.ratings import rate_contest
+from judge.ratings import rate_course
 
-__all__ = ['Course', 'CourseTag', 'CourseParticipation', 'CourseProblem', 'CourseSubmission', 'TheoryPost', 'TheoryPostGroup']
+__all__ = ['Course', 'CourseTag', 'CourseParticipation', 'CourseProblem', 'CourseSubmission', 'TheoryPost', 'TheoryPostGroup', 'CourseRating']
 
 
 class MinValueOrNoneValidator(MinValueValidator):
@@ -166,6 +166,10 @@ class Course(models.Model):
                                      help_text=_('Should be set even for organization-private courses, where it '
                                                  'determines whether the course is visible to members of the '
                                                  'specified organizations.'))
+
+    is_rated = models.BooleanField(verbose_name=_('course rated'), help_text=_('Whether this course can be rated.'),
+                                   default=False)
+
     view_course_scoreboard = models.ManyToManyField(Profile, verbose_name=_('view course scoreboard'), blank=True,
                                                      related_name='view_course_scoreboard',
                                                      help_text=_('These users will be able to view the scoreboard.'))
@@ -179,6 +183,16 @@ class Course(models.Model):
     use_clarifications = models.BooleanField(verbose_name=_('no comments'),
                                              help_text=_('Use clarification system instead of comments.'),
                                              default=True)
+
+    rating_floor = models.IntegerField(verbose_name=_('rating floor'),
+                                       help_text=_('Do not rate users who have a lower rating.'), null=True, blank=True)
+    rating_ceiling = models.IntegerField(verbose_name=_('rating ceiling'),
+                                         help_text=_('Do not rate users who have a higher rating.'),
+                                         null=True, blank=True)
+    rate_all = models.BooleanField(verbose_name=_('rate all'), help_text=_('Rate all users who joined.'), default=False)
+    rate_exclude = models.ManyToManyField(Profile, verbose_name=_('exclude from ratings'), blank=True,
+                                          related_name='rate_exclude+')
+
     is_private = models.BooleanField(verbose_name=_('private to specific users'), default=False)
     private_members = models.ManyToManyField(Profile, blank=True, verbose_name=_('private members'),
                                                  help_text=_('If non-empty, only these users may see the course.'),
@@ -528,6 +542,14 @@ class Course(models.Model):
             queryset = queryset.filter(q)
         return queryset.distinct()
 
+    def rate(self):
+        with transaction.atomic():
+            CourseRating.objects.filter(course__end_time__range=(self.end_time, self._now)).delete()
+            for course in Course.objects.filter(
+                is_rated=True, end_time__range=(self.end_time, self._now),
+            ).order_by('end_time'):
+                rate_course(course)
+
     class Meta:
         permissions = (
             ('see_private_contest', _('See private contests')),
@@ -575,6 +597,8 @@ class CourseParticipation(models.Model):
     def set_disqualified(self, disqualified):
         self.is_disqualified = disqualified
         self.recompute_results()
+        if self.course.is_rated and self.course.course_ratings.exists():
+            self.course.rate()
         if self.is_disqualified:
             if self.user.current_course == self:
                 self.user.remove_course()
@@ -716,3 +740,19 @@ class CourseTest(models.Model):
         verbose_name_plural = _('course tests')
         ordering = ('order',)
 
+
+class CourseRating(models.Model):
+    user = models.ForeignKey(Profile, verbose_name=_('user'), related_name='course_ratings', on_delete=CASCADE)
+    course = models.ForeignKey(Course, verbose_name=_('course'), related_name='course_ratings', on_delete=CASCADE)
+    participation = models.OneToOneField(CourseParticipation, verbose_name=_('participation'),
+                                         related_name='course_rating', on_delete=CASCADE)
+    rank = models.IntegerField(verbose_name=_('rank'))
+    rating = models.IntegerField(verbose_name=_('rating'))
+    mean = models.FloatField(verbose_name=_('raw rating'))
+    performance = models.FloatField(verbose_name=_('contest performance'))
+    last_rated = models.DateTimeField(db_index=True, verbose_name=_('last rated'))
+
+    class Meta:
+        unique_together = ('user', 'course')
+        verbose_name = _('course rating')
+        verbose_name_plural = _('course ratings')

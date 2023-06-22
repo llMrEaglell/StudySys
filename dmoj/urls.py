@@ -14,13 +14,13 @@ from judge.feed import AtomBlogFeed, AtomCommentFeed, AtomProblemFeed, BlogFeed,
 from judge.sitemap import sitemaps
 from judge.views import TitledTemplateView, api, blog, comment, contests, language, license, mailgun, organization, \
     preview, problem, problem_manage, ranked_submission, register, stats, status, submission, tasks, ticket, \
-    two_factor, user, widgets
+    two_factor, user, widgets, courses
 from judge.views.problem_data import ProblemDataView, ProblemSubmissionDiff, \
     problem_data_file, problem_init_view
 from judge.views.register import ActivationView, RegistrationView
 from judge.views.select2 import AssigneeSelect2View, ClassSelect2View, CommentSelect2View, ContestSelect2View, \
     ContestUserSearchSelect2View, OrganizationSelect2View, ProblemSelect2View, TicketUserSelect2View, \
-    UserSearchSelect2View, UserSelect2View, TheorySelect2View, TestSelect2View
+    UserSearchSelect2View, UserSelect2View, TheorySelect2View, TestSelect2View, CourseSelect2View
 from judge.views.widgets import martor_image_uploader
 
 admin.autodiscover()
@@ -187,11 +187,23 @@ urlpatterns = [
     ])),
 
     path('contests/', paged_list_view(contests.ContestList, 'contest_list')),
+
+    path('courses/', paged_list_view(courses.CourseList, 'course_list')),
+
     path('contests.ics', contests.ContestICal.as_view(), name='contest_ical'),
+
+    path('courses.ics', courses.CourseICal.as_view(), name='course_ical'),
+
     path('contests/<int:year>/<int:month>/', contests.ContestCalendar.as_view(), name='contest_calendar'),
     re_path(r'^contests/tag/(?P<name>[a-z-]+)', include([
         path('', contests.ContestTagDetail.as_view(), name='contest_tag'),
         path('/ajax', contests.ContestTagDetailAjax.as_view(), name='contest_tag_ajax'),
+    ])),
+
+    path('courses/<int:year>/<int:month>/', courses.CourseCalendar.as_view(), name='course_calendar'),
+    re_path(r'^courses/tag/(?P<name>[a-z-]+)', include([
+        path('', courses.CourseTagDetail.as_view(), name='course_tag'),
+        path('/ajax', courses.CourseTagDetailAjax.as_view(), name='course_tag_ajax'),
     ])),
 
     path('contest/<str:contest>', include([
@@ -220,6 +232,34 @@ urlpatterns = [
              name='contest_participation_disqualify'),
 
         path('/', lambda _, contest: HttpResponsePermanentRedirect(reverse('contest_view', args=[contest]))),
+    ])),
+
+    path('course/<str:course>', include([
+        path('', courses.CourseDetail.as_view(), name='contest_view'),
+        # path('/moss', courses.CourseMossView.as_view(), name='contest_moss'),
+        # path('/moss/delete', courses.ContestMossDelete.as_view(), name='contest_moss_delete'),
+        path('/clone', courses.CourseClone.as_view(), name='course_clone'),
+        path('/ranking/', courses.CourseRanking.as_view(), name='course_ranking'),
+        path('/ranking/ajax', courses.course_ranking_ajax, name='course_ranking_ajax'),
+        path('/join', courses.CourseJoin.as_view(), name='course_join'),
+        path('/leave', courses.CourseLeave.as_view(), name='course_leave'),
+        path('/stats', courses.CourseStats.as_view(), name='course_stats'),
+
+        path('/rank/<str:problem>/',
+             paged_list_view(ranked_submission.ContestRankedSubmission, 'course_ranked_submissions')),
+
+        path('/submissions/<str:user>/',
+             paged_list_view(submission.UserAllContestSubmissions, 'course_all_user_submissions')),
+        path('/submissions/<str:user>/<str:problem>/',
+             paged_list_view(submission.UserContestSubmissions, 'course_user_submissions')),
+
+        path('/participations', courses.CourseParticipationList.as_view(), name='course_participation_own'),
+        path('/participations/<str:user>',
+             courses.CourseParticipationList.as_view(), name='course_participation'),
+        path('/participation/disqualify', courses.CourseParticipationDisqualify.as_view(),
+             name='course_participation_disqualify'),
+
+        path('/', lambda _, course: HttpResponsePermanentRedirect(reverse('course_view', args=[course]))),
     ])),
 
     path('organizations/', organization.OrganizationList.as_view(), name='organization_list'),
@@ -359,6 +399,7 @@ urlpatterns = [
         path('theory/', TheorySelect2View.as_view(), name='theory_select2'),
         path('test/', TestSelect2View.as_view(), name='test_select2'),
         path('contest/', ContestSelect2View.as_view(), name='contest_select2'),
+        path('course/', CourseSelect2View.as_view(), name='course_select2'),
         path('comment/', CommentSelect2View.as_view(), name='comment_select2'),
     ])),
 
