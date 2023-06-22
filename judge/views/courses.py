@@ -35,7 +35,7 @@ from judge.comments import CommentedDetailView
 from judge.forms import CourseCloneForm
 from judge.models import Submission, Problem, Profile
 from judge.models.course import Course, CourseParticipation, CourseProblem, CourseTheory, CourseTest, \
-    CourseTag
+    CourseTag, TestPost, TheoryPost
 from judge.utils.opengraph import generate_opengraph
 from judge.utils.problems import _get_result_data
 from judge.utils.stats import get_bar_chart, get_pie_chart
@@ -281,6 +281,11 @@ class CourseDetail(CourseMixin, TitleMixin, CommentedDetailView):
                 problem.is_public and problem.has_public_editorial for problem in context['course_problems']
             ),
         }
+
+        context['course_tests'] = TestPost.objects.filter(courses__course=self.object)
+
+        context['course_theorys'] = TheoryPost.objects.filter(courses__course=self.object).order_by('courses__order')
+
         context['metadata'].update(
             **self.object.course_problems
             .annotate(
