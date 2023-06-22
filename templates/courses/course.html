@@ -74,7 +74,7 @@
                             <li>
                                 {% trans trimmed count=authors|length, link_authors=link_users(authors) %}
                                     The author of this course is {{ link_authors }}.
-                                {% pluralize count %}
+                                    {% pluralize count %}
                                     The authors of this course are {{ link_authors }}.
                                 {% endtrans %}
                             </li>
@@ -85,7 +85,7 @@
                             <li>
                                 {% trans trimmed count=testers|length, link_testers=link_users(testers) %}
                                     Special thanks to {{ link_testers }} for testing and feedback on the problems.
-                                {% pluralize count %}
+                                    {% pluralize count %}
                                     Special thanks to {{ link_testers }} for testing and feedback on the problems.
                                 {% endtrans %}
                             </li>
@@ -122,7 +122,7 @@
                         {% filter markdown('default') %}
                             {% trans trimmed count=metadata.problem_count %}
                                 There is **{{ count }}** problem in this course.
-                            {% pluralize count %}
+                                {% pluralize count %}
                                 There are **{{ count }}** problems in this course.
                             {% endtrans %}
                         {% endfilter %}
@@ -185,101 +185,94 @@
         {% endcache %}
     </div>
 
-    {% if course.ended or request.user.is_superuser or is_editor or is_tester or (is_spectator and course.started) %}
-        <hr>
-        <div class="contest-problems">
-            <h2 style="margin-bottom: 0.2em"><i class="fa fa-fw fa-question-circle"></i>{{ _('Problems') }} </h2>
-            <table class="table striped">
-                <thead>
+    <hr>
+    <div class="contest-problems">
+        <h2 style="margin-bottom: 0.2em"><i class="fa fa-fw fa-question-circle"></i>{{ _('Theorys') }} </h2>
+        <table class="table striped">
+            <thead>
+            <tr>
+                <th>{{ _('Theory') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for theory in course_theorys %}
                 <tr>
-                    <th>{{ _('Problem') }}</th>
-                    <th>{{ _('Points') }}</th>
-                    <th>{{ _('AC Rate') }}</th>
-                    <th>{{ _('Users') }}</th>
+                    <td>
+                        <a href="{{ url('theory_post', theory.id, theory.slug) }}">{{ theory.title }}</a>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="contest-problems">
+        <h2 style="margin-bottom: 0.2em"><i class="fa fa-fw fa-question-circle"></i>{{ _('Problems') }} </h2>
+        <table class="table striped">
+            <thead>
+            <tr>
+                <th>{{ _('Problem') }}</th>
+                <th>{{ _('Points') }}</th>
+                <th>{{ _('AC Rate') }}</th>
+                <th>{{ _('Users') }}</th>
+                {% if metadata.has_public_editorials %}
+                    <th>{{ _('Editorials') }}</th>
+                {% endif %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for problem in course_problems %}
+                <tr>
+                    <td>
+                        {% if problem.is_public or request.user.is_superuser or is_editor %}
+                            <a href="{{ url('problem_detail', problem.code) }}">{{ problem.i18n_name or problem.name }}</a>
+                        {% else %}
+                            {{ problem.i18n_name or problem.name }}
+                        {% endif %}
+                    </td>
+                    <td>{{ problem.points|floatformat }}{% if problem.partial %}p{% endif %}</td>
+                    <td>{{ problem.ac_rate|floatformat(1) }}%</td>
+                    <td>
+                        {% if problem.is_public %}
+                            <a href="{{ url('ranked_submissions', problem.code) }}">{{ problem.user_count }}</a>
+                        {% else %}
+                            {{ problem.user_count }}
+                        {% endif %}
+                    </td>
                     {% if metadata.has_public_editorials %}
-                        <th>{{ _('Editorials') }}</th>
+                        <td>
+                            {% if problem.is_public and problem.has_public_editorial %}
+                                <a href="{{ url('problem_editorial', problem.code) }}">{{ _('Editorial') }}</a>
+                            {% endif %}
+                        </td>
                     {% endif %}
                 </tr>
-                </thead>
-                <tbody>
-                {% for problem in course_problems %}
-                    <tr>
-                        <td>
-                            {% if problem.is_public or request.user.is_superuser or is_editor %}
-                                <a href="{{ url('problem_detail', problem.code) }}">{{ problem.i18n_name or problem.name }}</a>
-                            {% else %}
-                                {{ problem.i18n_name or problem.name }}
-                            {% endif %}
-                        </td>
-                        <td>{{ problem.points|floatformat }}{% if problem.partial %}p{% endif %}</td>
-                        <td>{{ problem.ac_rate|floatformat(1) }}%</td>
-                        <td>
-                            {% if problem.is_public %}
-                                <a href="{{ url('ranked_submissions', problem.code) }}">{{ problem.user_count }}</a>
-                            {% else %}
-                                {{ problem.user_count }}
-                            {% endif %}
-                        </td>
-                        {% if metadata.has_public_editorials %}
-                            <td>
-                                {% if problem.is_public and problem.has_public_editorial %}
-                                    <a href="{{ url('problem_editorial', problem.code) }}">{{ _('Editorial') }}</a>
-                                {% endif %}
-                            </td>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="contest-problems">
+        <h2 style="margin-bottom: 0.2em"><i class="fa fa-fw fa-question-circle"></i>{{ _('Tests') }} </h2>
+        <table class="table striped">
+            <thead>
+            <tr>
+                <th>{{ _('Test name') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for test_instance in course_tests %}
+                <tr>
+                    <td>
+                        {% if (request.user.is_superuser or is_editor) or course.is_in_course(request.user) %}
+                            <a href="{{ test_instance.form }}">{{ test_instance.title }}</a>
+                        {% else %}
+                            {{ test_instance.title }}
                         {% endif %}
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div class="contest-problems">
-            <h2 style="margin-bottom: 0.2em"><i class="fa fa-fw fa-question-circle"></i>{{ _('Tests') }} </h2>
-            <table class="table striped">
-                <thead>
-                <tr>
-                    <th>{{ _('Test name') }}</th>
+                    </td>
                 </tr>
-                </thead>
-                <tbody>
-                {% for test in course_tests %}
-                    <tr>
-                        <td>
-                            {% if (test.is_public or request.user.is_superuser or is_editor) and course.is_in_course(request.user) %}
-                                <a href="{{ test.form }}">{{ test.title }}</a>
-                            {% else %}
-                                {{ test.title }}
-                            {% endif %}
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div class="contest-problems">
-            <h2 style="margin-bottom: 0.2em"><i class="fa fa-fw fa-question-circle"></i>{{ _('Tests') }} </h2>
-            <table class="table striped">
-                <thead>
-                <tr>
-                    <th>{{ _('Theory') }}</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for theory in course_theorys %}
-                    <tr>
-                        <td>
-                            {% if theory.is_public or request.user.is_superuser or is_editor %}
-                                <a href="{{ url('theory_post', theory.id, theory.slug) }}">{{ theory.title }}</a>
-                            {% else %}
-                                {{ test.title }}
-                            {% endif %}
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% endif %}
-
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     <hr>
     <span class="social">
