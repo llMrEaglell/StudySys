@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title_row %}{% endblock %}
+{% block title_ruler %}{% endblock %}
+
+{% block media %}
+    <link rel="alternate" type="application/atom+xml" href="{{ url('blog_atom') }}" title="Atom Blog Feed">
+    <link rel="alternate" type="application/rss+xml" href="{{ url('blog_rss') }}" title="RSS Blog Feed">
+    <link rel="alternate" type="application/atom+xml" href="{{ url('comment_atom') }}" title="Atom Comment Feed">
+    <link rel="alternate" type="application/rss+xml" href="{{ url('comment_rss') }}" title="RSS Comment Feed">
+    <link rel="alternate" type="application/atom+xml" href="{{ url('problem_atom') }}" title="Atom Problem Feed">
+    <link rel="alternate" type="application/rss+xml" href="{{ url('problem_rss') }}" title="RSS Problem Feed">
+{% endblock %}
+
+{% block js_media %}
+    <script type="text/javascript">
+        $(document).ready(function () {
+            $('.time-remaining').each(function () {
+                count_down($(this));
+            });
+
+            $('.blog-sidebar').hide();
+            $('#blog-tab').find('a').click(function (e) {
+                e.preventDefault();
+                $('#blog-tab').addClass('active');
+                $('#event-tab').removeClass('active');
+                $('.blog-content').show();
+                $('.blog-sidebar').hide();
+            });
+            $('#event-tab').find('a').click(function (e) {
+                e.preventDefault();
+                $('#event-tab').addClass('active');
+                $('#blog-tab').removeClass('active');
+                $('.blog-content').hide();
+                $('.blog-sidebar').show();
+            });
+        });
+    </script>
+{% endblock %}
+
+{% block body %}
+    {% block before_posts %}{% endblock %}
+    <div id="mobile" class="tabs">
+        <ul>
+            <li id="blog-tab" class="tab active"><a href="#">
+                <i class="tab-icon fa fa-info-circle"></i> {{ _('Blog') }}
+            </a></li>
+            <li id="event-tab" class="tab"><a href="#"><i class="tab-icon fa fa-rss"></i> {{ _('Events') }}</a></li>
+        </ul>
+    </div>
+    <div id="blog-container">
+
+        <div class="blog-content sidebox">
+            <h3>{{ _('Theory') }} <i class="fa fa-terminal"></i></h3>
+            <div class="sidebox-content">
+                {% for theory in theorys %}
+                    <section class="{% if theory.sticky %}sticky {% endif %}post">
+                        <h2 class="title">
+                            <a href="{{ url('theory_post', theory.id, theory.slug) }}">{{ theory.title }}</a>
+                        </h2>
+                        <span class="time">
+                            {%- if theory.sticky %}<i title="Sticky" class="fa fa-star fa-fw"></i>{% endif -%}
+                            {% with authors=theory.authors.all() %}
+                                {%- if authors -%}
+                                    <span class="post-authors">{{ link_users(authors) }}</span>
+                                {%- endif -%}
+                            {% endwith %}
+                            {% with abs=_('posted on {time}'), rel=_('posted {time}') %}
+                                {{ relative_time(theory.publish_on, abs=abs, rel=rel) }}
+                            {% endwith %}
+                        </span><span class="comment-data">
+                            <a href="{{ url('theory_post', theory.id, theory.slug) }}#comments" class="comment-count-link">
+                                <i class="fa fa-comments comment-icon"></i><span class="comment-count">
+                                    {{- post_comment_counts[theory.id] or 0 -}}
+                                </span>
+                            </a>
+                        </span>
+                        <div class="summary content-description">
+                            {% cache 86400 'theory_summary' theory.id %}
+                                {{ theory.summary|default(theory.content, true)|markdown('blog', 'svg', lazy_load=True)|reference|str|safe }}
+                            {% endcache %}
+                            {%- if theory.summary -%}
+                                <p><a href="{{ url('theory_post', theory.id, theory.slug) }}">{{ _('Continue reading...') }}</a></p>
+                            {%- endif -%}
+                        </div>
+                    </section>
+                {% endfor %}
+            </div>
+            {% if page_obj.has_other_pages() %}
+                <div class="bottom-pagination-bar">{% include "list-pages.html" %}</div>
+            {% endif %}
+        </div>
+
+    </div>
+    {% block after_posts %}{% endblock %}
+{% endblock %}

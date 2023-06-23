@@ -1,0 +1,43 @@
+ф{% extends "base.html" %}
+
+{% block js_media %}
+    {% include "comments/media-js.html" %}
+{% endblock %}
+
+{% block media %}
+    {% include "comments/media-css.html" %}
+{% endblock %}
+
+{% block header %}
+    {% if theory.is_editable_by(request.user) %}
+        <div class="title-line-action">[<a href="{{ url('admin:judge_theorypost_change', theory.id) }}">{{ _('Edit') }}</a>]
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+    <div class="post-full">
+        <div class="time">
+            {% with authors=theory.authors.all() %}
+                {% if authors %}
+                    <span class="post-authors">{{ link_users(authors) }}</span>
+                {% endif %}
+            {% endwith %}
+        </div>
+        <div class="body content-description">
+            {% cache 86400 'post_content' theory.id MATH_ENGINE %}
+                {{ theory.content|markdown('blog', MATH_ENGINE)|reference|str|safe}}
+            {% endcache %}
+        </div>
+    </div>
+    <hr>
+    {% include "comments/list.html" %}
+{% endblock %}
+
+{% block bodyend %}
+    {{ super() }}
+    {% if REQUIRE_JAX %}
+        {% include "mathjax-load.html" %}
+    {% endif %}
+    {% include "comments/math.html" %}
+{% endblock %}
