@@ -78,11 +78,12 @@ services:
     command: run -c /judge.yml localhost
   mathoid:
     container_name: mathoid
-    image: mathoid:mathoid
-    build: ./mathoid
+    image: ninjaclasher/dmoj-mathoid
     restart: unless-stopped
+    volumes:
+      - /Users/o.hubenko/IdeaProjects/dmoj-docker/dmoj/mathoid/config.yaml:/node_modules/mathoid/config.yaml
     ports:
-      - "127.0.0.1:10044:10044"
+      - "127.0.0.1:8888:8888"
   texoid:
     container_name: texoid
     image: texoid:texoid
